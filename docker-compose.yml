@@ -1,0 +1,43 @@
+services:
+  backend:
+    build:
+      context: fastapi_backend
+    environment:
+      - OPENAPI_OUTPUT_FILE=./shared-data/openapi.json
+      - DATABASE_URL=mssql+aioodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes
+      - DATABASE_SYNC_URL=mssql+pyodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes
+      # - TEST_DATABASE_URL=postgresql+asyncpg://postgres:password@db:5433/testdatabase
+    ports:
+      - "8000:8000"
+    networks:
+      - my_network
+    volumes:
+      - ./fastapi_backend:/app
+      - fastapi-venv:/app/.venv
+      - ./local-shared-data:/app/shared-data
+
+  frontend:
+    build:
+      context: ./nextjs-frontend
+    user: node
+    ports:
+      - "3000:3000"
+    networks:
+      - my_network
+    environment:
+      NODE_ENV: development
+      API_BASE_URL: http://backend:8000
+      OPENAPI_OUTPUT_FILE: ./shared-data/openapi.json
+    volumes:
+      - ./nextjs-frontend:/app
+      - nextjs-node-modules:/app/node_modules
+      - ./local-shared-data:/app/shared-data
+
+volumes:
+  postgres_data:
+  nextjs-node-modules:
+  fastapi-venv:
+
+networks:
+  my_network:
+    driver: bridge
