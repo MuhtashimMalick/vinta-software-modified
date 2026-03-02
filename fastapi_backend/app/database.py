@@ -7,15 +7,14 @@ from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .config import settings
-from .models import Base, User
+from .models import User
 
 
 parsed_db_url = urlparse(settings.DATABASE_URL)
 
 async_db_connection_url = (
-    f"postgresql+asyncpg://{parsed_db_url.username}:{parsed_db_url.password}@"
-    f"{parsed_db_url.hostname}{':' + str(parsed_db_url.port) if parsed_db_url.port else ''}"
-    f"{parsed_db_url.path}"
+    "mssql+aioodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes"
+
 )
 
 # Disable connection pooling for serverless environments like Vercel
@@ -26,9 +25,9 @@ async_session_maker = async_sessionmaker(
 )
 
 
-async def create_db_and_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+# async def create_db_and_tables():
+#     async with engine.begin() as conn:
+#         await conn.run_sync(Base.metadata.create_all)
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:

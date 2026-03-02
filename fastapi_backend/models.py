@@ -1,75 +1,15 @@
 from typing import Any, Optional
 import datetime
 import decimal
-from decimal import Decimal
 import uuid
-from sqlmodel import SQLModel
+
 from sqlalchemy import BigInteger, Boolean, CHAR, Column, Computed, DECIMAL, DateTime, Float, Identity, Index, Integer, NCHAR, Numeric, PrimaryKeyConstraint, REAL, SmallInteger, String, TEXT, Table, Unicode, Uuid, text
 from sqlalchemy.dialects.mssql import MONEY, SMALLDATETIME, TINYINT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sqlalchemy import MetaData
-
-# metadata = MetaData(schema="dbo")
-# Base = DeclarativeBase(metadata=metadata)
-# class Base(DeclarativeBase):
-#     pass
 class Base(DeclarativeBase):
-    metadata = MetaData(schema="dbo")
-import uuid
+    pass
 
-from pydantic import EmailStr
-from sqlmodel import Field, SQLModel
-
-class UserBase(SQLModel):
-    email: EmailStr = Field(unique=True, index=True, max_length=255)
-    is_active: bool = True
-    is_superuser: bool = False
-    full_name: str | None = Field(default=None, max_length=255)
-
-
-# Properties to receive via API on creation
-class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=40)
-
-
-class UserRegister(SQLModel):
-    email: EmailStr = Field(max_length=255)
-    password: str = Field(min_length=8, max_length=40)
-    full_name: str | None = Field(default=None, max_length=255)
-
-
-# Properties to receive via API on update, all are optional
-class UserUpdate(UserBase):
-    email: EmailStr | None = Field(
-        default=None, max_length=255)  # type: ignore
-    password: str | None = Field(default=None, min_length=8, max_length=40)
-
-
-class UserUpdateMe(SQLModel):
-    full_name: str | None = Field(default=None, max_length=255)
-    email: EmailStr | None = Field(default=None, max_length=255)
-
-
-class UpdatePassword(SQLModel):
-    current_password: str = Field(min_length=8, max_length=40)
-    new_password: str = Field(min_length=8, max_length=40)
-
-
-# Database model, database table inferred from class name
-class User(UserBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    hashed_password: str
-
-
-# Properties to return via API, id is always required
-class UserPublic(UserBase):
-    id: uuid.UUID
-
-
-class UsersPublic(SQLModel):
-    data: list[UserPublic]
-    count: int
 
 class EParcelHeader(Base):
     __tablename__ = 'eParcel_Header'
@@ -77,49 +17,13 @@ class EParcelHeader(Base):
         PrimaryKeyConstraint('SendPCMSManifest_Id', 'TransactionId', name='PK_eParcel_Header'),
     )
 
-    TransactionId: Mapped[str] = mapped_column(Unicode(40, 'Latin1_General_CI_AS'), primary_key=True)
+    TransactionId: Mapped[str] = mapped_column(Unicode(20, 'Latin1_General_CI_AS'), primary_key=True)
     SendPCMSManifest_Id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     TransactionDateTime: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-    ParentId: Mapped[Optional[str]] = mapped_column(Unicode(40, 'Latin1_General_CI_AS'))
-    TransactionSequence: Mapped[Optional[str]] = mapped_column(Unicode(40, 'Latin1_General_CI_AS'))
-    ApplicationId: Mapped[Optional[str]] = mapped_column(Unicode(20, 'Latin1_General_CI_AS'))
-# class EParcelHeader(Base):
-#     __tablename__ = "eParcel_Header"
+    ParentId: Mapped[Optional[str]] = mapped_column(Unicode(20, 'Latin1_General_CI_AS'))
+    TransactionSequence: Mapped[Optional[str]] = mapped_column(Unicode(20, 'Latin1_General_CI_AS'))
+    ApplicationId: Mapped[Optional[str]] = mapped_column(Unicode(10, 'Latin1_General_CI_AS'))
 
-#     __table_args__ = (
-#         PrimaryKeyConstraint(
-#             "SendPCMSManifest_Id",
-#             "TransactionId",
-#             name="PK_eParcel_Header",
-#         ),
-#         {"schema": "dbo"},
-#     )
-
-#     TransactionId: Mapped[str] = mapped_column(
-#         Unicode(40, collation="Latin1_General_CI_AS"),
-#         primary_key=True,
-#     )
-
-#     SendPCMSManifest_Id: Mapped[uuid.UUID] = mapped_column(
-#         Uuid,
-#         primary_key=True,
-#     )
-
-#     TransactionDateTime: Mapped[Optional[datetime.datetime]] = mapped_column(
-#         DateTime
-#     )
-
-#     ParentId: Mapped[Optional[str]] = mapped_column(
-#         Unicode(40, collation="Latin1_General_CI_AS")
-#     )
-
-#     TransactionSequence: Mapped[Optional[str]] = mapped_column(
-#         Unicode(40, collation="Latin1_General_CI_AS")
-#     )
-
-#     ApplicationId: Mapped[Optional[str]] = mapped_column(
-#         Unicode(20, collation="Latin1_General_CI_AS")
-#     )
 
 class EParcelPCMSConsignment(Base):
     __tablename__ = 'eParcel_PCMSConsignment'
@@ -5473,23 +5377,23 @@ t_tePremXMLPurchaseOrders = Table(
 )
 
 
-# t_vBuildWithComponents = Table(
-#     'vBuildWithComponents', Base.metadata,
-#     Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('citemNumber', Unicode(30, 'Latin1_General_CI_AS')),
-#     Column('ItemName', Unicode(30, 'Latin1_General_CI_AS'))
-# )
+t_vBuildWithComponents = Table(
+    'vBuildWithComponents', Base.metadata,
+    Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
+    Column('citemNumber', Unicode(30, 'Latin1_General_CI_AS')),
+    Column('ItemName', Unicode(30, 'Latin1_General_CI_AS'))
+)
 
 
-# t_vItemsonOrderbyETA = Table(
-#     'vItemsonOrderbyETA', Base.metadata,
-#     Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('ItemName', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('ItemDescription', Unicode(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('ETA', CHAR(7, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('TotQtyOnOrder', Numeric(18, 3), nullable=False),
-#     Column('NewOrderAmount', Numeric(18, 3), nullable=False)
-# )
+t_vItemsonOrderbyETA = Table(
+    'vItemsonOrderbyETA', Base.metadata,
+    Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
+    Column('ItemName', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
+    Column('ItemDescription', Unicode(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('ETA', CHAR(7, 'Latin1_General_CI_AS'), nullable=False),
+    Column('TotQtyOnOrder', Numeric(18, 3), nullable=False),
+    Column('NewOrderAmount', Numeric(18, 3), nullable=False)
+)
 
 
 class VMYOBBarcodesConversion(Base):
@@ -5502,151 +5406,151 @@ class VMYOBBarcodesConversion(Base):
     Barcode: Mapped[str] = mapped_column(CHAR(25, 'Latin1_General_CI_AS'), primary_key=True)
 
 
-# t_vOnOrderbyETAbyItemID = Table(
-#     'vOnOrderbyETAbyItemID', Base.metadata,
-#     Column('ETA', String(10, 'Latin1_General_CI_AS')),
-#     Column('ItemID', Integer, nullable=False),
-#     Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('TotQtyOnOrder', Float(53))
-# )
+t_vOnOrderbyETAbyItemID = Table(
+    'vOnOrderbyETAbyItemID', Base.metadata,
+    Column('ETA', String(10, 'Latin1_General_CI_AS')),
+    Column('ItemID', Integer, nullable=False),
+    Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
+    Column('TotQtyOnOrder', Float(53))
+)
 
 
-# t_vOnOrderbyItemID = Table(
-#     'vOnOrderbyItemID', Base.metadata,
-#     Column('ItemID', Integer, nullable=False),
-#     Column('Description', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('TotQtyOnOrder', Float(53)),
-#     Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('PurchaseID', Integer, nullable=False),
-#     Column('PurchaseNumber', String(8, 'Latin1_General_CI_AS'), nullable=False)
-# )
+t_vOnOrderbyItemID = Table(
+    'vOnOrderbyItemID', Base.metadata,
+    Column('ItemID', Integer, nullable=False),
+    Column('Description', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('TotQtyOnOrder', Float(53)),
+    Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
+    Column('PurchaseID', Integer, nullable=False),
+    Column('PurchaseNumber', String(8, 'Latin1_General_CI_AS'), nullable=False)
+)
 
 
-# t_vPickingSlip = Table(
-#     'vPickingSlip', Base.metadata,
-#     Column('SaleID', Integer, nullable=False),
-#     Column('InvoiceNumber', Unicode(8, 'Latin1_General_CI_AS')),
-#     Column('LineNumber', Integer, nullable=False),
-#     Column('MethodCode', CHAR(255, 'Latin1_General_CI_AS')),
-#     Column('TenderAmount', Float(53)),
-#     Column('TransDate', DateTime),
-#     Column('ItemName', Unicode(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('SellUnitQuantity', SmallInteger, nullable=False),
-#     Column('SellUnitMeasure', Unicode(5, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Name', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Quantity', Float(53), nullable=False),
-#     Column('TaxExclusiveUnitPrice', Float(53), nullable=False),
-#     Column('TaxCodeID', Integer, nullable=False),
-#     Column('TaxCode', String(3, 'Latin1_General_CI_AS')),
-#     Column('Comment', String(2048, 'Latin1_General_CI_AS')),
-#     Column('Date', SMALLDATETIME),
-#     Column('ABN', String(14, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('CompanyName', String(50, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Address', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Phone', String(20, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('FaxNumber', String(20, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Email', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('TaxExclusiveTotal', Float(53), nullable=False),
-#     Column('ShippingCost', Float(53)),
-#     Column('ShippingInsurance', Float(53)),
-#     Column('SaleOrderNo', String(50, 'Latin1_General_CI_AS')),
-#     Column('AustralianPartNo', String(50, 'Latin1_General_CI_AS')),
-#     Column('StoneWeightPerItem', Float(53)),
-#     Column('DiamondWeightPerItem', Float(53)),
-#     Column('MetalGoldWeightPerItem', Float(53)),
-#     Column('NetWeight', Float(53)),
-#     Column('TotalPaid', Float(53), nullable=False),
-#     Column('TaxInclusiveFreight', Float(53), nullable=False),
-#     Column('CardRecordID', Integer, nullable=False),
-#     Column('TaxExclusiveFreight', Float(53), nullable=False),
-#     Column('TotalTax', Float(53), nullable=False),
-#     Column('GrossWeightOfShipment', Float(53)),
-#     Column('LastName', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('FirstName', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Location', Integer),
-#     Column('Street', String(255, 'Latin1_General_CI_AS')),
-#     Column('City', String(255, 'Latin1_General_CI_AS')),
-#     Column('State', String(255, 'Latin1_General_CI_AS')),
-#     Column('PostCode', String(255, 'Latin1_General_CI_AS')),
-#     Column('Country', String(255, 'Latin1_General_CI_AS')),
-#     Column('ContactName', CHAR(50, 'Latin1_General_CI_AS')),
-#     Column('StreetLine1', String(255, 'Latin1_General_CI_AS')),
-#     Column('StreetLine2', String(255, 'Latin1_General_CI_AS')),
-#     Column('StreetLine3', String(255, 'Latin1_General_CI_AS')),
-#     Column('StreetLine4', String(255, 'Latin1_General_CI_AS')),
-#     Column('ShipToAddress', Unicode(255, 'Latin1_General_CI_AS')),
-#     Column('ShipToAddressLine1', Unicode(255, 'Latin1_General_CI_AS')),
-#     Column('ShipToAddressLine2', Unicode(255, 'Latin1_General_CI_AS')),
-#     Column('ShipToAddressLine3', Unicode(255, 'Latin1_General_CI_AS')),
-#     Column('ShipToAddressLine4', Unicode(255, 'Latin1_General_CI_AS')),
-#     Column('SalesName', String(60, 'Latin1_General_CI_AS')),
-#     Column('SaleLastName', String(60, 'Latin1_General_CI_AS')),
-#     Column('SalesFirstName', String(60, 'Latin1_General_CI_AS')),
-#     Column('CustomerPONumber', Unicode(20, 'Latin1_General_CI_AS')),
-#     Column('Discount', Float(53), nullable=False),
-#     Column('DeliveryDate', DateTime),
-#     Column('RunNo', CHAR(15, 'Latin1_General_CI_AS')),
-#     Column('FreightCompany', String(50, 'Latin1_General_CI_AS')),
-#     Column('ConsignmentNo', String(55, 'Latin1_General_CI_AS')),
-#     Column('dup', String(55, 'Latin1_General_CI_AS')),
-#     Column('QuantityOnHand', Float(53), nullable=False),
-#     Column('SortField', String(55, 'Latin1_General_CI_AS'))
-# )
+t_vPickingSlip = Table(
+    'vPickingSlip', Base.metadata,
+    Column('SaleID', Integer, nullable=False),
+    Column('InvoiceNumber', Unicode(8, 'Latin1_General_CI_AS')),
+    Column('LineNumber', Integer, nullable=False),
+    Column('MethodCode', CHAR(255, 'Latin1_General_CI_AS')),
+    Column('TenderAmount', Float(53)),
+    Column('TransDate', DateTime),
+    Column('ItemName', Unicode(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
+    Column('SellUnitQuantity', SmallInteger, nullable=False),
+    Column('SellUnitMeasure', Unicode(5, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Name', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Quantity', Float(53), nullable=False),
+    Column('TaxExclusiveUnitPrice', Float(53), nullable=False),
+    Column('TaxCodeID', Integer, nullable=False),
+    Column('TaxCode', String(3, 'Latin1_General_CI_AS')),
+    Column('Comment', String(2048, 'Latin1_General_CI_AS')),
+    Column('Date', SMALLDATETIME),
+    Column('ABN', String(14, 'Latin1_General_CI_AS'), nullable=False),
+    Column('CompanyName', String(50, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Address', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Phone', String(20, 'Latin1_General_CI_AS'), nullable=False),
+    Column('FaxNumber', String(20, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Email', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('TaxExclusiveTotal', Float(53), nullable=False),
+    Column('ShippingCost', Float(53)),
+    Column('ShippingInsurance', Float(53)),
+    Column('SaleOrderNo', String(50, 'Latin1_General_CI_AS')),
+    Column('AustralianPartNo', String(50, 'Latin1_General_CI_AS')),
+    Column('StoneWeightPerItem', Float(53)),
+    Column('DiamondWeightPerItem', Float(53)),
+    Column('MetalGoldWeightPerItem', Float(53)),
+    Column('NetWeight', Float(53)),
+    Column('TotalPaid', Float(53), nullable=False),
+    Column('TaxInclusiveFreight', Float(53), nullable=False),
+    Column('CardRecordID', Integer, nullable=False),
+    Column('TaxExclusiveFreight', Float(53), nullable=False),
+    Column('TotalTax', Float(53), nullable=False),
+    Column('GrossWeightOfShipment', Float(53)),
+    Column('LastName', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('FirstName', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Location', Integer),
+    Column('Street', String(255, 'Latin1_General_CI_AS')),
+    Column('City', String(255, 'Latin1_General_CI_AS')),
+    Column('State', String(255, 'Latin1_General_CI_AS')),
+    Column('PostCode', String(255, 'Latin1_General_CI_AS')),
+    Column('Country', String(255, 'Latin1_General_CI_AS')),
+    Column('ContactName', CHAR(50, 'Latin1_General_CI_AS')),
+    Column('StreetLine1', String(255, 'Latin1_General_CI_AS')),
+    Column('StreetLine2', String(255, 'Latin1_General_CI_AS')),
+    Column('StreetLine3', String(255, 'Latin1_General_CI_AS')),
+    Column('StreetLine4', String(255, 'Latin1_General_CI_AS')),
+    Column('ShipToAddress', Unicode(255, 'Latin1_General_CI_AS')),
+    Column('ShipToAddressLine1', Unicode(255, 'Latin1_General_CI_AS')),
+    Column('ShipToAddressLine2', Unicode(255, 'Latin1_General_CI_AS')),
+    Column('ShipToAddressLine3', Unicode(255, 'Latin1_General_CI_AS')),
+    Column('ShipToAddressLine4', Unicode(255, 'Latin1_General_CI_AS')),
+    Column('SalesName', String(60, 'Latin1_General_CI_AS')),
+    Column('SaleLastName', String(60, 'Latin1_General_CI_AS')),
+    Column('SalesFirstName', String(60, 'Latin1_General_CI_AS')),
+    Column('CustomerPONumber', Unicode(20, 'Latin1_General_CI_AS')),
+    Column('Discount', Float(53), nullable=False),
+    Column('DeliveryDate', DateTime),
+    Column('RunNo', CHAR(15, 'Latin1_General_CI_AS')),
+    Column('FreightCompany', String(50, 'Latin1_General_CI_AS')),
+    Column('ConsignmentNo', String(55, 'Latin1_General_CI_AS')),
+    Column('dup', String(55, 'Latin1_General_CI_AS')),
+    Column('QuantityOnHand', Float(53), nullable=False),
+    Column('SortField', String(55, 'Latin1_General_CI_AS'))
+)
 
 
-# t_vPurchaseLinesbyOrder = Table(
-#     'vPurchaseLinesbyOrder', Base.metadata,
-#     Column('PurchaseID', Integer, nullable=False),
-#     Column('PurchaseNumber', String(8, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('SupplierInvoiceNumber', String(20, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Date', DateTime),
-#     Column('TaxExclusiveFreight', Float(53), nullable=False),
-#     Column('TaxInclusiveFreight', Float(53), nullable=False),
-#     Column('TotalTax', Float(53), nullable=False),
-#     Column('PromisedDate', DateTime),
-#     Column('Description', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('TaxExclusiveTotal', Float(53), nullable=False),
-#     Column('TaxInclusiveTotal', Float(53), nullable=False),
-#     Column('Quantity', Float(53), nullable=False),
-#     Column('ItemID', Integer, nullable=False),
-#     Column('TaxExclusiveUnitPrice', Float(53), nullable=False),
-#     Column('TaxInclusiveUnitPrice', Float(53), nullable=False),
-#     Column('Discount', Float(53), nullable=False)
-# )
+t_vPurchaseLinesbyOrder = Table(
+    'vPurchaseLinesbyOrder', Base.metadata,
+    Column('PurchaseID', Integer, nullable=False),
+    Column('PurchaseNumber', String(8, 'Latin1_General_CI_AS'), nullable=False),
+    Column('SupplierInvoiceNumber', String(20, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Date', DateTime),
+    Column('TaxExclusiveFreight', Float(53), nullable=False),
+    Column('TaxInclusiveFreight', Float(53), nullable=False),
+    Column('TotalTax', Float(53), nullable=False),
+    Column('PromisedDate', DateTime),
+    Column('Description', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('TaxExclusiveTotal', Float(53), nullable=False),
+    Column('TaxInclusiveTotal', Float(53), nullable=False),
+    Column('Quantity', Float(53), nullable=False),
+    Column('ItemID', Integer, nullable=False),
+    Column('TaxExclusiveUnitPrice', Float(53), nullable=False),
+    Column('TaxInclusiveUnitPrice', Float(53), nullable=False),
+    Column('Discount', Float(53), nullable=False)
+)
 
 
-# t_vTaxInvoiceItems = Table(
-#     'vTaxInvoiceItems', Base.metadata,
-#     Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('ItemNameInChinese', Unicode(155, 'Latin1_General_CI_AS')),
-#     Column('Quantity', Float(53), nullable=False),
-#     Column('TaxExclusiveUnitPrice', Float(53), nullable=False),
-#     Column('Discount', Float(53), nullable=False),
-#     Column('TaxExclusiveTotal', Float(53), nullable=False),
-#     Column('ShipToAddress', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('ShipToAddressLine1', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('ShipToAddressLine2', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Comment', String(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('ShipVia', String(255, 'Latin1_General_CI_AS')),
-#     Column('ABN', Unicode(14, 'Latin1_General_CI_AS')),
-#     Column('TaxCode', String(3, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Freight', Float(53), nullable=False),
-#     Column('TotalTax', Float(53), nullable=False),
-#     Column('OutstandingBalance', Float(53), nullable=False),
-#     Column('TaxPercentageRate', Float(53), nullable=False),
-#     Column('PurchaseID', Integer, nullable=False),
-#     Column('Terms', String(100, 'Latin1_General_CI_AS')),
-#     Column('ItemDescription', Unicode(255, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('Date', SMALLDATETIME),
-#     Column('TotalPaid', Float(53), nullable=False),
-#     Column('ItemName', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('BuyUnitMeasure', Unicode(5, 'Latin1_General_CI_AS'), nullable=False),
-#     Column('BuyUnitQuantity', SmallInteger, nullable=False),
-#     Column('Name', Unicode(52, 'Latin1_General_CI_AS')),
-#     Column('MethodOfPaymentID', Integer),
-#     Column('BSBCode', Unicode(7, 'Latin1_General_CI_AS')),
-#     Column('BankAccountNumber', Unicode(19, 'Latin1_General_CI_AS')),
-#     Column('BankAccountName', Unicode(32, 'Latin1_General_CI_AS')),
-#     Column('PaymentNotes', Unicode(255, 'Latin1_General_CI_AS'))
-# )
+t_vTaxInvoiceItems = Table(
+    'vTaxInvoiceItems', Base.metadata,
+    Column('ItemNumber', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
+    Column('ItemNameInChinese', Unicode(155, 'Latin1_General_CI_AS')),
+    Column('Quantity', Float(53), nullable=False),
+    Column('TaxExclusiveUnitPrice', Float(53), nullable=False),
+    Column('Discount', Float(53), nullable=False),
+    Column('TaxExclusiveTotal', Float(53), nullable=False),
+    Column('ShipToAddress', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('ShipToAddressLine1', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('ShipToAddressLine2', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Comment', String(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('ShipVia', String(255, 'Latin1_General_CI_AS')),
+    Column('ABN', Unicode(14, 'Latin1_General_CI_AS')),
+    Column('TaxCode', String(3, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Freight', Float(53), nullable=False),
+    Column('TotalTax', Float(53), nullable=False),
+    Column('OutstandingBalance', Float(53), nullable=False),
+    Column('TaxPercentageRate', Float(53), nullable=False),
+    Column('PurchaseID', Integer, nullable=False),
+    Column('Terms', String(100, 'Latin1_General_CI_AS')),
+    Column('ItemDescription', Unicode(255, 'Latin1_General_CI_AS'), nullable=False),
+    Column('Date', SMALLDATETIME),
+    Column('TotalPaid', Float(53), nullable=False),
+    Column('ItemName', Unicode(30, 'Latin1_General_CI_AS'), nullable=False),
+    Column('BuyUnitMeasure', Unicode(5, 'Latin1_General_CI_AS'), nullable=False),
+    Column('BuyUnitQuantity', SmallInteger, nullable=False),
+    Column('Name', Unicode(52, 'Latin1_General_CI_AS')),
+    Column('MethodOfPaymentID', Integer),
+    Column('BSBCode', Unicode(7, 'Latin1_General_CI_AS')),
+    Column('BankAccountNumber', Unicode(19, 'Latin1_General_CI_AS')),
+    Column('BankAccountName', Unicode(32, 'Latin1_General_CI_AS')),
+    Column('PaymentNotes', Unicode(255, 'Latin1_General_CI_AS'))
+)
