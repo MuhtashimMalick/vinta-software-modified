@@ -1967,7 +1967,10 @@ class TOSTINVENTORYCOUNTS(Base):
     TOITEM: Mapped[Optional[str]] = mapped_column(String(50, 'Latin1_General_CI_AS'))
     CYCLECODE: Mapped[Optional[str]] = mapped_column(String(10, 'Latin1_General_CI_AS'))
     ABCCLASS: Mapped[Optional[str]] = mapped_column(String(1, 'Latin1_General_CI_AS'))
-    COUNTNOTES: Mapped[Optional[str]] = mapped_column(TEXT(16, 'Latin1_General_CI_AS'))
+    COUNTNOTES: Mapped[Optional[str]] = mapped_column(
+        Unicode(16, collation="Latin1_General_CI_AS"),
+        nullable=True
+    )
     SYSDATECREATED: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     SYSDATEMODIFIED: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     SYSUSERCREATED: Mapped[Optional[str]] = mapped_column(String(30, 'Latin1_General_CI_AS'))

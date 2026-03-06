@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi_pagination import add_pagination
 from .schemas import UserCreate, UserRead, UserUpdate
@@ -6,11 +7,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from .utils import simple_generate_unique_route_id
 from app.routes.salesorder import router as sales_router
 from app.config import settings
+from app.logging_config import setup_logging, log_startup_info, log_shutdown_info
+from app.logging_middleware import LoggingMiddleware
+
+# Initialize logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     generate_unique_id_function=simple_generate_unique_route_id,
     openapi_url=settings.OPENAPI_URL,
 )
+
+# Add logging middleware (BEFORE CORS to capture all requests)
+app.add_middleware(LoggingMiddleware)
 
 # Middleware for CORS configuration
 app.add_middleware(
@@ -51,3 +61,21 @@ app.include_router(
 
 app.include_router(sales_router, prefix="/sales",tags=["sales"])
 add_pagination(app)
+
+
+# =====================================================================
+# STARTUP AND SHUTDOWN EVENTS
+# =====================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Log application startup."""
+    log_startup_info()
+    logger.info("FastAPI application started successfully")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Log application shutdown."""
+    log_shutdown_info()
+    logger.info("FastAPI application shutdown completed")

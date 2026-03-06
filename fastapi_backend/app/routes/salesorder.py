@@ -1,5 +1,6 @@
 # app/routers/unleashed.py
 
+import logging
 from fastapi import APIRouter, Depends, Body, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -23,6 +24,9 @@ from app.models import (
     TShippingMethods
 )
 import datetime
+
+# Get logger
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 API_ID = "e1242a87-6f65-4d90-b931-0437f793f7c1"
@@ -170,8 +174,9 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
         )
 
         headers = result.scalars().all()
-        print(headers)
+        logger.debug(f"Found {len(headers)} unsent headers")
         if not headers:
+            logger.info("No unexported sales orders found")
             return {"message": "No unexported sales orders found"}
 
         results = []
@@ -224,7 +229,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                 if cust_id is not None: #what if cust is not present in the tcustomer table should we return cust not present in our system 
                     tcust_res = await db.execute(select(TCustomers).where(TCustomers.CustomerID == '145').limit(1))
                     tcust = tcust_res.scalars().first()
-                    print(tcust)
+                    logger.debug(f"Retrieved TCustomer record: {tcust}")
                     if tcust and getattr(tcust, 'TaxCodeID', None) is not None:
                         tax_rec = await db.execute(select(TTaxCodes).where(TTaxCodes.TaxCodeID == tcust.TaxCodeID).limit(1))
                         taxobj = tax_rec.scalars().first()
@@ -278,7 +283,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                     "UnitPrice": round(unit_ex, 4),
                     "LineTotal": round(line_total, 8),
                     "TaxRate": round(line_tax_rate, 6),
-                    "LineTax": round(line_tax, 3),
+                    "LineTax": round(line_tax, 3)
                     # "Guid": None
                 })
 
@@ -306,19 +311,19 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                     "TaxCode": "G.S.T.", #tax_code,
                     "TaxRate": 0.1 # round(tax_rate, 6) if tax_rate is not None else (round(float(lines[0].SaleTaxRate) / 100.0, 6) if getattr(lines[0], 'SaleTaxRate', None) is not None else 0.0)
                 },
-                "DeliveryContact": cust.PhoneNo1,
+                # "DeliveryContact": cust.PhoneNo1,
                 "DeliveryName": cust.ShipToName,
-                "DeliveryStreetAddress":cust.Addess1,                                    #cust.ShipToAddress1,
+                "DeliveryStreetAddress":cust.Address1,                                    #cust.ShipToAddress1,
                 "DeliveryStreetAddress2":cust.Address2,                                   #cust.ShipToAddress2,
                 "DeliverySuburb": cust.Suburb,
                 "DeliveryPostCode": str(cust.PostCode).strip(),
                 "DeliveryMethod":shipping_method,
-                "TaxRate": 0.1,#round(tax_rate, 6) if tax_rate is not None else (round(float(lines[0].SaleTaxRate) / 100.0, 6) if getattr(lines[0], 'SaleTaxRate', None) is not None else 0.0),
+                # "TaxRate": 0.1,#round(tax_rate, 6) if tax_rate is not None else (round(float(lines[0].SaleTaxRate) / 100.0, 6) if getattr(lines[0], 'SaleTaxRate', None) is not None else 0.0),
                 "SubTotal": round(sub_total, 3),
                 "TaxTotal": round(tax_total, 3),
                 "Total": round(total, 3)
             }
-            print("called",tax_code,cust.PostCode)
+            logger.info(f"Processing sales order | TaxCode: {tax_code} | PostCode: {cust.PostCode}")
             try:
                 response = requests.post(
                     BASE_URL,
@@ -326,7 +331,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                     json=payload,
                     timeout=30
                 )
-                # print("response",reponse.text)
+                logger.debug(f"Unleashed response status: {response.status_code}")
                 if response.status_code == 201:
                     # mark header, customer and lines as sent
                     header.Sent2Host = 'Y'
@@ -344,16 +349,17 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
 
                     results.append({"order_id": header.TransID.strip(), "status": "exported"})
                 else:
-                    print("here",response.text)
+                    logger.error(f"Failed to export order: {response.text}")
                     results.append({"order_id": header.TransID.strip(), "status": "failed", "error": response.text})
-                print("i am here")
+                logger.debug("Order processing completed")
             except Exception as e:
-                print("exception",e)
+                logger.exception(f"Exception processing order: {e}")
                 results.append({"order_id": header.TransID.strip(), "status": "error", "error": str(e)})
-        # print(response.text,"resp")
+        logger.info(f"Sales order export completed: {len(results)} processed")
         return {"processed": len(results), "results": results}
     except Exception as e:
-        print("e",e)
+        logger.exception(f"Critical error in export_sales_orders: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/import-remote-xml", status_code=201)
