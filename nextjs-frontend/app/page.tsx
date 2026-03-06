@@ -11,9 +11,13 @@ import {
   Cog6ToothIcon,
   BellIcon,
   ChevronDownIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { ArrowsRightLeftIcon } from "@heroicons/react/24/solid";
 import { clsx } from "clsx";
+import axios from "axios";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,7 +27,11 @@ interface ActivityLog {
   id: number;
   timestamp: string;
   actionType: string;
-  actionVariant: "import-pda" | "export-unleashed" | "export-pda" | "import-erp";
+  actionVariant:
+    | "import-pda"
+    | "export-unleashed"
+    | "export-pda"
+    | "import-erp";
   status: LogStatus;
   message: string;
 }
@@ -53,7 +61,8 @@ const SAMPLE_LOGS: ActivityLog[] = [
     actionType: "Export PDA",
     actionVariant: "export-pda",
     status: "Error",
-    message: "Connection timeout: Could not reach SQL Server instance PDA_DB_01.",
+    message:
+      "Connection timeout: Could not reach SQL Server instance PDA_DB_01.",
   },
   {
     id: 4,
@@ -91,9 +100,11 @@ function StatusBadge({ status }: { status: LogStatus }) {
     <span
       className={clsx(
         "inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold border",
-        status === "Success" && "bg-green-500/20 text-green-400 border-green-500/30",
-        status === "In Progress" && "bg-orange-500/20 text-orange-400 border-orange-500/30",
-        status === "Error" && "bg-red-500/20 text-red-400 border-red-500/30"
+        status === "Success" &&
+          "bg-green-500/20 text-green-400 border-green-500/30",
+        status === "In Progress" &&
+          "bg-orange-500/20 text-orange-400 border-orange-500/30",
+        status === "Error" && "bg-red-500/20 text-red-400 border-red-500/30",
       )}
     >
       {status}
@@ -131,8 +142,67 @@ function ActionCell({
 
 export default function DataSyncDashboard() {
   const [showOlder, setShowOlder] = useState(false);
+  const [logs, setLogs] = useState<ActivityLog[]>(SAMPLE_LOGS);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
 
-  const visibleLogs = showOlder ? [...SAMPLE_LOGS, ...OLDER_LOGS] : SAMPLE_LOGS;
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const visibleLogs = showOlder ? [...logs, ...OLDER_LOGS] : logs;
+
+  async function exportFromSQLToUnleashed() {
+    const newLog: ActivityLog = {
+      id: Date.now(),
+      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
+      actionType: "Export Unleashed",
+      actionVariant: "export-unleashed",
+      status: "In Progress",
+      message: "Exporting sales orders from SQL to Unleashed...",
+    };
+    setLogs((prev) => [newLog, ...prev]);
+
+    try {
+      await axios.post(
+        "http://localhost:8000/sales/export-sales-orders",
+        null,
+        {
+          headers: { accept: "application/json" },
+        },
+      );
+
+      setLogs((prev) =>
+        prev.map((l) =>
+          l.id === newLog.id
+            ? {
+                ...l,
+                status: "Success",
+                message: "Sales orders successfully exported to Unleashed.",
+              }
+            : l,
+        ),
+      );
+      showToast("Sales orders exported to Unleashed successfully.", "success");
+    } catch {
+      setLogs((prev) =>
+        prev.map((l) =>
+          l.id === newLog.id
+            ? {
+                ...l,
+                status: "Error",
+                message:
+                  "Export failed: Could not reach the sales orders endpoint.",
+              }
+            : l,
+        ),
+      );
+      showToast("Export failed. Could not reach the server.", "error");
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0d1117] text-white text-sm">
@@ -143,7 +213,9 @@ export default function DataSyncDashboard() {
           <div className="w-8 h-8 rounded-md bg-blue-500 flex items-center justify-center shrink-0">
             <ArrowsRightLeftIcon className="w-4 h-4 text-white" />
           </div>
-          <span className="font-semibold text-[15px] tracking-tight">Data Sync Dashboard</span>
+          <span className="font-semibold text-[15px] tracking-tight">
+            Data Sync Dashboard
+          </span>
         </div>
 
         {/* Right actions */}
@@ -183,7 +255,8 @@ export default function DataSyncDashboard() {
             Data Integration Overview
           </h1>
           <p className="text-gray-400 mt-1">
-            Manage data synchronization between PDA systems and Unleashed ERP via SQL Server.
+            Manage data synchronization between PDA systems and Unleashed ERP
+            via SQL Server.
           </p>
         </div>
 
@@ -195,7 +268,11 @@ export default function DataSyncDashboard() {
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center">
                   {/* table/grid icon */}
-                  <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg
+                    className="w-5 h-5 text-blue-400"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
                     <path
                       fillRule="evenodd"
                       d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h2v2H5V5zm0 4h2v2H5V9zm0 4h2v2H5v-2zm4-8h2v2H9V5zm0 4h2v2H9V9zm0 4h2v2H9v-2zm4-8h2v2h-2V5zm0 4h2v2h-2V9zm0 4h2v2h-2v-2z"
@@ -203,7 +280,9 @@ export default function DataSyncDashboard() {
                     />
                   </svg>
                 </div>
-                <span className="font-semibold text-[15px]">PDA to Unleashed</span>
+                <span className="font-semibold text-[15px]">
+                  PDA to Unleashed
+                </span>
               </div>
               <ArrowRightIcon className="w-4 h-4 text-gray-500" />
             </div>
@@ -214,15 +293,15 @@ export default function DataSyncDashboard() {
                 className="bg-blue-500 hover:bg-blue-600 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 font-semibold cursor-pointer"
               >
                 <ArrowDownTrayIcon className="w-7 h-7" />
-                <span className="text-sm">Import from PDA</span>
+                <span className="text-sm">Import from PDA to SQL</span>
               </button>
 
               <button
-                onClick={() => console.log("Export to Unleashed")}
+                onClick={() => exportFromSQLToUnleashed()}
                 className="border border-blue-400/50 hover:bg-blue-400/10 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 text-blue-400 font-semibold cursor-pointer"
               >
                 <ArrowUpTrayIcon className="w-7 h-7" />
-                <span className="text-sm">Export to Unleashed</span>
+                <span className="text-sm">Export from SQL to Unleashed</span>
               </button>
             </div>
           </div>
@@ -233,32 +312,30 @@ export default function DataSyncDashboard() {
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center">
                   {/* database icon */}
-                  <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg
+                    className="w-5 h-5 text-blue-400"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
                     <path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z" />
                     <path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z" />
                     <path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z" />
                   </svg>
                 </div>
-                <span className="font-semibold text-[15px]">Unleashed to PDA</span>
+                <span className="font-semibold text-[15px]">
+                  Unleashed to PDA
+                </span>
               </div>
               <ArrowLeftIcon className="w-4 h-4 text-gray-500" />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="flex justify-center">
               <button
                 onClick={() => console.log("Import from ERP")}
-                className="bg-blue-500 hover:bg-blue-600 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 font-semibold cursor-pointer"
+                className="bg-blue-500 hover:bg-blue-600 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 font-semibold cursor-pointer w-[calc(50%-6px)]"
               >
                 <CloudArrowDownIcon className="w-7 h-7" />
-                <span className="text-sm">Import from ERP</span>
-              </button>
-
-              <button
-                onClick={() => console.log("Export to PDA")}
-                className="border border-blue-400/50 hover:bg-blue-400/10 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 text-blue-400 font-semibold cursor-pointer"
-              >
-                <ArrowRightCircleIcon className="w-7 h-7" />
-                <span className="text-sm">Export to PDA</span>
+                <span className="text-sm">Import from Unleashed to SQL</span>
               </button>
             </div>
           </div>
@@ -299,14 +376,18 @@ export default function DataSyncDashboard() {
                   key={log.id}
                   className={clsx(
                     "hover:bg-white/[0.025] transition-colors",
-                    idx < visibleLogs.length - 1 && "border-b border-white/[0.06]"
+                    idx < visibleLogs.length - 1 &&
+                      "border-b border-white/[0.06]",
                   )}
                 >
                   <td className="px-5 py-4 font-mono text-xs text-gray-400 whitespace-nowrap">
                     {log.timestamp}
                   </td>
                   <td className="px-5 py-4 whitespace-nowrap">
-                    <ActionCell variant={log.actionVariant} label={log.actionType} />
+                    <ActionCell
+                      variant={log.actionVariant}
+                      label={log.actionType}
+                    />
                   </td>
                   <td className="px-5 py-4 whitespace-nowrap">
                     <StatusBadge status={log.status} />
@@ -329,7 +410,7 @@ export default function DataSyncDashboard() {
               <ChevronDownIcon
                 className={clsx(
                   "w-4 h-4 transition-transform",
-                  showOlder && "rotate-180"
+                  showOlder && "rotate-180",
                 )}
               />
               {showOlder ? "Hide older logs" : "Load older logs"}
@@ -343,6 +424,29 @@ export default function DataSyncDashboard() {
         © 2023 Data Sync Engine v2.4.0 • Enterprise Edition • Connected to{" "}
         <span className="text-blue-400 font-medium">SQL_PROD_CLUSTER</span>
       </footer>
+      {toast && (
+        <div
+          className={clsx(
+            "fixed bottom-6 right-6 z-50 flex items-start gap-3 px-4 py-3 rounded-xl border shadow-2xl text-sm font-medium transition-all",
+            toast.type === "success"
+              ? "bg-[#1a2030] border-green-500/40 text-green-400"
+              : "bg-[#1a2030] border-red-500/40 text-red-400",
+          )}
+        >
+          {toast.type === "success" ? (
+            <CheckCircleIcon className="w-5 h-5 shrink-0 mt-0.5" />
+          ) : (
+            <XCircleIcon className="w-5 h-5 shrink-0 mt-0.5" />
+          )}
+          <span>{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 opacity-50 hover:opacity-100 transition-opacity"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
