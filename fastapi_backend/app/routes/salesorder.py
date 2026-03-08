@@ -1,19 +1,19 @@
 # app/routers/unleashed.py
-
+import datetime
 import logging
-from fastapi import APIRouter, Depends, Body, HTTPException
-from sqlalchemy.orm import Session
-from typing import List
 import requests
-import base64
-import hashlib
-import hmac
-import json
+
+from defusedxml import ElementTree as ET
+from dateutil import parser as dateutil_parser
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, Body, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+
 from app.database import  get_async_session
+from app.config import settings
 from app.models import (
-    TRICGPDAMobileSalesHeader,
-    TRICGPDAMobileSalesOrdersLine,
     TREMOTETransCustomer,
     TREMOTETransSaleLines,
     TREMOTETransHeader,
@@ -23,44 +23,12 @@ from app.models import (
     TTaxCodes,
     TShippingMethods
 )
-import datetime
+from app.utils import get_headers
+
 
 # Get logger
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-API_ID = "e1242a87-6f65-4d90-b931-0437f793f7c1"
-API_KEY = "3W1MHYwXaDR2iYOQ853Mbs9Ccf5N8khCOIkTWLMEmSIN7k5Z4oowvZMpz4onZQS3nDrJhYTdher8sPB3K4yw=="
-BASE_URL = "https://api.unleashedsoftware.com/SalesOrders"
-
-
-# ==============================
-# AUTH
-# ==============================
-
-def generate_signature(api_key, query_string=""):
-    message = query_string.encode("utf-8")
-    secret = api_key.encode("utf-8")
-    signature = hmac.new(secret, message, hashlib.sha256).digest()
-    return base64.b64encode(signature).decode()
-
-def get_headers(query_string=""):
-    return {
-        "api-auth-id": API_ID,
-        "api-auth-signature": generate_signature(API_KEY, query_string),
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-
-
-# ==============================
-# ENDPOINT
-# ==============================
-from sqlalchemy import select, delete
-from defusedxml import ElementTree as ET
-from dateutil import parser as dateutil_parser
-from decimal import Decimal
-
 
 ####################RIGCG PDA SALES ORDER VERSION
 # @router.post("/export-sales-orders")       
@@ -326,7 +294,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
             logger.info(f"Processing sales order | TaxCode: {tax_code} | PostCode: {cust.PostCode}")
             try:
                 response = requests.post(
-                    BASE_URL,
+                    f"{settings.BASE_URL}/SalesOrders",
                     headers=get_headers(),
                     json=payload,
                     timeout=30

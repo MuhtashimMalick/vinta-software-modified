@@ -1550,10 +1550,12 @@ class TItems(Base):
         Index('IX_tItems_Change_Control', 'ChangeControl', mssql_clustered=False, mssql_include=[]),
         Index('IX_tItems_CustomField1', 'CustomField1', mssql_clustered=False, mssql_include=[]),
         Index('IX_tItems_CustomField2', 'CustomField2', mssql_clustered=False, mssql_include=[]),
-        Index('IX_tItems_CustomField3', 'CustomField3', mssql_clustered=False, mssql_include=[])
+        Index('IX_tItems_CustomField3', 'CustomField3', mssql_clustered=False, mssql_include=[]),
+        {"implicit_returning": False}
     )
 
-    ItemID: Mapped[int] = mapped_column(Integer, primary_key=True)
+    UnleashedGUID: Mapped[Optional[str]] = mapped_column('UnleashedGUID', Unicode(36, 'Latin1_General_CI_AS'), unique=True, nullable=True)
+    ItemID: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     IsInactive: Mapped[str] = mapped_column(Unicode(1, 'Latin1_General_CI_AS'), nullable=False)
     ItemNumber: Mapped[str] = mapped_column(Unicode(55, 'Latin1_General_CI_AS'), nullable=False)
     QuantityOnHand: Mapped[float] = mapped_column(Float(53), nullable=False)
