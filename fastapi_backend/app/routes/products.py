@@ -59,22 +59,23 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
         if not guid:
             skipped += 1
             continue
-
+ 
         product_code = product.get("ProductCode")
         stock = stock_map.get(product_code)
-
         mapped = map_item(product, stock)
-        unleashed_modified: Optional[datetime] = mapped["DateLastModified"]
-
+ 
         if guid not in existing_map:
-            mapped["ItemID"] = next_id   # ✅ assign ID explicitly
+            mapped["ItemID"] = next_id
+            logger.info(f"Inserting ItemID={next_id} for {product.get('ProductCode')}")
             db.add(TItems(**mapped))
+            await db.flush()  
             next_id += 1
             inserted += 1
         else:
             existing_row = existing_map[guid]
-            db_modified: Optional[datetime] = existing_row.DateLastModified
-
+            db_modified = existing_row.DateLastModified
+            unleashed_modified = mapped["DateLastModified"]
+ 
             if (
                 unleashed_modified
                 and db_modified
@@ -82,16 +83,15 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
             ):
                 skipped += 1
                 continue
-
+ 
             await db.execute(
                 TItems.__table__.update()
                 .where(TItems.ItemID == existing_row.ItemID)
                 .values(**{k: v for k, v in mapped.items() if k != "UnleashedGUID"})
             )
             updated += 1
-
+ 
     await db.commit()
-
     return {
         "status": "success",
         "total_from_api": len(products),

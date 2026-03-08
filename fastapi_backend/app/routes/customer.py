@@ -30,28 +30,10 @@ from decimal import Decimal
 # Get logger
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-API_ID = "e1242a87-6f65-4d90-b931-0437f793f7c1"
-API_KEY = "3W1MHYwXaDR2iYOQ853Mbs9Ccf5N8khCOIkTWLMEmSIN7k5Z4oowvZMpz4onZQS3nDrJhYTdher8sPB3K4yw=="
-BASE_URL = "https://api.unleashedsoftware.com/Customers"
+from app.utils import get_headers
+from app.config import settings
 
 
-def generate_signature(api_key, query_string=""):
-    message = query_string.encode("utf-8")
-    secret = api_key.encode("utf-8")
-    signature = hmac.new(secret, message, hashlib.sha256).digest()
-    return base64.b64encode(signature).decode()
-
-def get_headers(query_string=""):
-    return {
-        "api-auth-id": API_ID,
-        "api-auth-signature": generate_signature(API_KEY, query_string),
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-
-
-# Helper: convert None → ""
 def safe(value):
     """Convert None to empty string, otherwise return string representation"""
     if value is None:
@@ -124,126 +106,101 @@ def compute_invoice_metrics(invoices):
 
 
 
-# Call Unleashed API
-def send_to_unleashed(payload):
-    """Send POST request to Unleashed API"""
-    signature = generate_signature(BASE_URL)
-
-    headers = {
-        "api-auth-id": API_ID,
-        "api-auth-signature": signature,
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-
-    print("====== PAYLOAD SENT ======")
-    print(json.dumps(payload, indent=2))
-
-    response = requests.post(
-        BASE_URL,
-        headers=headers,
-        json=payload
-    )
-
-    print("====== RESPONSE ======")
-    print(response.text)
-
-    return response
-
-
-# Fetch customers from Unleashed API
 def fetch_customers_from_unleashed():
-    """Fetch all customers from Unleashed API with pagination"""
-    signature = generate_signature(BASE_URL)
-
-    headers = {
-        "api-auth-id": API_ID,
-        "api-auth-signature": signature,
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-
     all_customers = []
-    page_number = 0
-    
+    page_number = 1  # Unleashed pages start at 1
+    page_size = 200
+
     try:
         while True:
-            # Unleashed uses pagination with pageNumber parameter
-            url_with_page = f"{BASE_URL}"
-            # signature = base64.b64encode(
-            #     hmac.new(
-            #         API_KEY.encode("utf-8"),
-            #         url_with_page.encode("utf-8"),
-            #         hashlib.sha256
-            #     ).digest()
-            # ).decode()
-            
-            # headers["api-auth-signature"] = signature
+            query_string = f"pageNumber={page_number}&pageSize={page_size}"
+            url_with_page = f"{settings.BASE_URL}/Customers"
 
-            response = requests.get(url_with_page, headers=get_headers())
+            response = requests.get(
+                url_with_page,
+                headers=get_headers(query_string=query_string),
+                params={
+                    "pageNumber": page_number,
+                    "pageSize": page_size,
+                }
+            )
 
             if response.status_code != 200:
                 logger.error(f"Error fetching customers: {response.text}")
                 break
 
             data = response.json()
-            
-            # Check if we have customers in this page
+
             if "Items" not in data or not data["Items"]:
                 break
 
             all_customers.extend(data["Items"])
-            
-            # Check if there are more pages
-            if not data.get("HasMorePages", False):
+
+            pagination = data.get("Pagination", {})
+            total_pages = pagination.get("NumberOfPages", 1)
+
+            logger.info(f"Fetched page {page_number}/{total_pages} — {len(data['Items'])} customers")
+
+            if page_number >= total_pages:
                 break
-                
+
             page_number += 1
 
+        logger.info(f"Total customers fetched: {len(all_customers)}")
         return all_customers
 
     except Exception as e:
         logger.error(f"Exception fetching customers from Unleashed: {str(e)}")
         raise
 
-
-# Fetch invoices from Unleashed API
 def fetch_invoices_from_unleashed():
     """Fetch all invoices from Unleashed API with pagination"""
-    invoices_url = "https://api.unleashedsoftware.com/Invoices"
     all_invoices = []
-    page_number = 0
-    
+    page_number = 1
+    page_size = 200
+
     try:
         while True:
-            headers = get_headers()
+            query_string = f"pageNumber={page_number}&pageSize={page_size}"
+            invoices_url = f"{settings.BASE_URL}/Invoices"
 
-            response = requests.get(invoices_url, headers=headers)
+            response = requests.get(
+                invoices_url,
+                headers=get_headers(query_string=query_string),
+                params={
+                    "pageNumber": page_number,
+                    "pageSize": page_size,
+                }
+            )
 
             if response.status_code != 200:
                 logger.error(f"Error fetching invoices: {response.text}")
                 break
 
             data = response.json()
-            
-            # Check if we have invoices in this page
+
             if "Items" not in data or not data["Items"]:
                 break
 
             all_invoices.extend(data["Items"])
-            
-            # Check if there are more pages
-            if not data.get("HasMorePages", False):
+
+            pagination = data.get("Pagination", {})
+            total_pages = pagination.get("NumberOfPages", 1)
+
+            logger.info(f"Fetched page {page_number}/{total_pages} — {len(data['Items'])} invoices")
+
+            if page_number >= total_pages:
                 break
-                
+
             page_number += 1
 
-        logger.info(f"Fetched {len(all_invoices)} invoices from Unleashed")
+        logger.info(f"Total invoices fetched: {len(all_invoices)}")
         return all_invoices
 
     except Exception as e:
         logger.error(f"Exception fetching invoices from Unleashed: {str(e)}")
         return []
+
 def get_shipping_address(unleashed_customer):
     addresses = unleashed_customer.get("Addresses", [])
     
@@ -276,8 +233,7 @@ def map_unleashed_to_tcustomer(unleashed_customer, metrics=None):
     last_name = name.split()[-1] if name else ""
 
     return TCustomers(
-        # Required fields - using safe() to handle None
-        # CustomerID=00,
+
         CustomerCode=safe(unleashed_customer.get("CustomerCode", "")),
         CardRecordID=0,
         CardIdentification=safe(unleashed_customer.get("CustomerCode", "")),
@@ -392,80 +348,6 @@ def map_unleashed_to_tcustomer(unleashed_customer, metrics=None):
         ONHOLD="Y" if unleashed_customer.get("StopCredit") else "N",
     )
 
-# def map_unleashed_to_tcustomer(unleashed_customer: dict) -> TCustomers:
-#     """
-#     Map Unleashed customer data to TCustomers model
-#     All missing fields default to empty string or 0
-#     """
-#     return TCustomers(
-#         # Required fields - using safe() to handle None
-#         # CustomerID=00,
-#         CustomerCode=safe(unleashed_customer.get("CustomerCode", "")),
-#         CardRecordID=0,
-#         CardIdentification=safe(unleashed_customer.get("CustomerCode", "")),
-#         Name=safe(unleashed_customer.get("CustomerName", "")),
-#         LastName=safe(unleashed_customer.get("CustomerName", "").split()[-1] if unleashed_customer.get("CustomerName") else ""),
-#         FirstName=safe(unleashed_customer.get("CustomerName", "").split()[0] if unleashed_customer.get("CustomerName") else ""),
-#         IsIndividual="N",  # Default to non-individual
-#         IsInactive="N",
-#         Notes=safe(unleashed_customer.get("Comments", "")),
-#         IdentifierID=safe(unleashed_customer.get("CustomerCode", "")),
-#         CustomField1="",
-#         CustomField2="",
-#         CustomField3="",
-#         TermsID=0,
-#         ABN=safe(unleashed_customer.get("ABN", "")),
-#         ABNBranch="",
-#         PriceLevelID="",
-#         TaxIDNumber=safe(unleashed_customer.get("TaxNumber", "")),
-#         TaxCodeID=0,
-#         FreightTaxCodeID=0,
-#         UseCustomerTaxCode="N",
-#         CreditLimit=0.0,
-#         VolumeDiscount=0.0,
-#         CurrentBalance=0.0,
-#         TotalDeposits=0.0,
-#         TotalReceivableDays=0,
-#         TotalPaidInvoices=0,
-#         HighestInvoiceAmount=0.0,
-#         HighestReceivableAmount=0.0,
-#         PaymentCardNumber="",
-#         PaymentNameOnCard="",
-#         PaymentBankAccountName="",
-#         PaymentNotes="",
-#         HourlyBillingRate=0.0,
-#         SaleLayoutID="",
-#         PrintedForm="",
-#         ChangeControl="",
-#         # Optional fields
-#         CurrencyID=None,
-#         Picture=None,
-#         Identifiers=safe(unleashed_customer.get("CustomerCode", "")),
-#         CustomList1ID=None,
-#         CustomList2ID=None,
-#         CustomList3ID=None,
-#         CustomerSince=None,
-#         LastSaleDate=None,
-#         LastPaymentDate=None,
-#         MethodOfPaymentID=None,
-#         PaymentExpirationDate=None,
-#         PaymentBSB=safe(unleashed_customer.get("BankBSB", "")),
-#         PaymentBankAccountNumber=safe(unleashed_customer.get("BankAccountNumber", "")),
-#         IncomeAccountID=None,
-#         SalespersonID=None,
-#         SaleCommentID=None,
-#         ShippingMethodID=None,
-#         GSTIDNumber=safe(unleashed_customer.get("TaxNumber", "")),
-#         ReceiptMemo=safe(unleashed_customer.get("Comments", "")),
-#         PaymentBankBranch=safe(unleashed_customer.get("BankBranch", "")),
-#         PaymentAddress=safe(unleashed_customer.get("DeliveryStreetAddress", "")),
-#         PaymentZIP=safe(unleashed_customer.get("DeliveryPostalCode", "")),
-#         PaymentCardVerification="",
-#         ACCNO=None,
-#         ONHOLD="N"
-#     )
-# FastAPI Endpoint: Export customer to Unleashed
-
 
 
 # FastAPI Endpoint: Import all customers from Unleashed to SQL database
@@ -510,13 +392,34 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
         
         logger.info(f"Grouped {len(unleashed_invoices)} invoices across {len(invoice_map)} customers")
         
+        # Fetch all existing customer codes in ONE query
+        logger.info("Fetching existing customer codes from database...")
+        existing_codes_result = await session.execute(
+            select(TCustomers.CustomerCode)
+        )
+        existing_codes = set(existing_codes_result.scalars().all())
+        logger.info(f"Found {len(existing_codes)} existing customer codes in database")
+        
         imported_count = 0
         failed_count = 0
+        already_present_count = 0
         errors = []
+        already_present = []
         
         for unleashed_customer in unleashed_customers:
             try:
                 customer_code = unleashed_customer.get("CustomerCode")
+                
+                # Check if customer already exists by checking the set (O(1) lookup)
+                if customer_code in existing_codes:
+                    already_present_count += 1
+                    already_present.append({
+                        "CustomerCode": customer_code,
+                        "CustomerName": unleashed_customer.get("CustomerName", ""),
+                        "Message": f"Customer with code {customer_code} already exists in database"
+                    })
+                    logger.info(f"Customer {customer_code} already exists in database, skipping...")
+                    continue
                 
                 # Get invoices for this customer
                 customer_invoices = invoice_map.get(customer_code, [])
@@ -550,6 +453,8 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
             "message": f"Successfully imported {imported_count} out of {len(unleashed_customers)} customers with metrics",
             "imported_count": imported_count,
             "failed_count": failed_count,
+            "already_present_count": already_present_count,
+            "already_present": already_present,
             "invoices_processed": len(unleashed_invoices),
             "errors": errors if errors else []
         }
@@ -562,28 +467,3 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
             detail=f"Error importing customers: {str(e)}"
         )
 
-
-# FastAPI Endpoint: Get customer data from Unleashed (returns raw data)
-@router.get("/get-customers-from-unleashed")
-async def get_customers_from_unleashed():
-    """
-    Fetch all customers from Unleashed API and return raw data.
-    Useful for debugging and seeing what fields are available.
-    """
-    try:
-        logger.info("Fetching customers from Unleashed API...")
-        
-        customers = fetch_customers_from_unleashed()
-        
-        return {
-            "status": "success",
-            "count": len(customers),
-            "customers": customers[0]
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching customers: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching customers from Unleashed: {str(e)}"
-        )

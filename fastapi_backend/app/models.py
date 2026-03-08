@@ -657,7 +657,7 @@ class TCustomers(Base):
     IsIndividual: Mapped[str] = mapped_column(Unicode(1, 'Latin1_General_CI_AS'), nullable=False)
     IsInactive: Mapped[str] = mapped_column(Unicode(1, 'Latin1_General_CI_AS'), nullable=False)
     Notes: Mapped[str] = mapped_column(Unicode(255, 'Latin1_General_CI_AS'), nullable=False)
-    IdentifierID: Mapped[str] = mapped_column(Unicode(26, 'Latin1_General_CI_AS'), nullable=False)
+    IdentifierID: Mapped[str] = mapped_column(Unicode(52, 'Latin1_General_CI_AS'), nullable=False)
     CustomField1: Mapped[str] = mapped_column(Unicode(255, 'Latin1_General_CI_AS'), nullable=False)
     CustomField2: Mapped[str] = mapped_column(Unicode(255, 'Latin1_General_CI_AS'), nullable=False)
     CustomField3: Mapped[str] = mapped_column(Unicode(255, 'Latin1_General_CI_AS'), nullable=False)

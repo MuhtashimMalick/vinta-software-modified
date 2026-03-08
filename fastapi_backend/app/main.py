@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .utils import simple_generate_unique_route_id
 from app.routes.salesorder import router as sales_router
 from app.routes.products import router as products_router
-from app.routes.unleashedtosql import router as customer
+from app.routes.customer import router as customer
 from app.config import settings
 from app.logging_config import setup_logging, log_startup_info, log_shutdown_info
 from app.logging_middleware import LoggingMiddleware

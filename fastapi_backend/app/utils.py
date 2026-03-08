@@ -44,10 +44,10 @@ async def fetch_all_unleashed_products() -> list[dict]:
 
     async with httpx.AsyncClient() as client:
         while True:
-            query_string = f"PageSize={page_size}&ProductCode=KBP"
+            query_string = f"PageSize={page_size}"
             response = await client.get(
                 f"{settings.BASE_URL}/Products/{page}",
-                params={"PageSize": page_size, "ProductCode": "KBP"},
+                params={"PageSize": page_size},
                 headers=get_headers(query_string=query_string),
                 timeout=30,
             )
@@ -203,10 +203,10 @@ async def fetch_all_stock_on_hand() -> dict[str, dict]:
 
     async with httpx.AsyncClient() as client:
         while True:
-            query_string = f"PageSize={page_size}&ProductCode=KBP"
+            query_string = f"PageSize={page_size}"
             response = await client.get(
                 f"{settings.BASE_URL}/StockOnHand/{page}",
-                params={"PageSize": page_size, "ProductCode": "KBP"},
+                params={"PageSize": page_size},
                 headers=get_headers(query_string=query_string),
                 timeout=30,
             )
