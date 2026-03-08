@@ -169,7 +169,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
         result = await db.execute(
             select(TREMOTETransHeader).where(
                 (TREMOTETransHeader.Sent2Host == None) 
-                | (TREMOTETransHeader.Sent2Host == 'Y')
+                | (TREMOTETransHeader.Sent2Host != 'Y')
             ).limit(1)
         )
 

@@ -635,6 +635,7 @@ class TCustomerProductProfileDetails(Base):
     AccountCode: Mapped[str] = mapped_column(String(255, 'Latin1_General_CI_AS'), nullable=False)
 
 
+from sqlalchemy import Identity
 class TCustomers(Base):
     __tablename__ = 'tCustomers'
     __table_args__ = (
@@ -643,7 +644,11 @@ class TCustomers(Base):
         Index('IX_tCustomers_Name', 'Name', mssql_clustered=False, mssql_include=[])
     )
 
-    CustomerID: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    CustomerID: Mapped[int] = mapped_column(
+    Integer, Identity(start=1, increment=1), primary_key=True
+    )
+    CustomerCode: Mapped[str] = mapped_column(String(10, 'Latin1_General_CI_AS'), nullable=True)
     CardRecordID: Mapped[int] = mapped_column(Integer, nullable=False)
     CardIdentification: Mapped[str] = mapped_column(Unicode(16, 'Latin1_General_CI_AS'), nullable=False)
     Name: Mapped[str] = mapped_column(String(255, 'Latin1_General_CI_AS'), nullable=False)

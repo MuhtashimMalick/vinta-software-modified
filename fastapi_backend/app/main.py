@@ -6,6 +6,7 @@ from .users import auth_backend, fastapi_users, AUTH_URL_PATH
 from fastapi.middleware.cors import CORSMiddleware
 from .utils import simple_generate_unique_route_id
 from app.routes.salesorder import router as sales_router
+from app.routes.unleashedtosql import router as customer
 from app.config import settings
 from app.logging_config import setup_logging, log_startup_info, log_shutdown_info
 from app.logging_middleware import LoggingMiddleware
@@ -60,6 +61,7 @@ app.include_router(
 
 
 app.include_router(sales_router, prefix="/sales",tags=["sales"])
+app.include_router(customer, prefix="/cusotmers",tags=["customers"])
 add_pagination(app)
 
 
