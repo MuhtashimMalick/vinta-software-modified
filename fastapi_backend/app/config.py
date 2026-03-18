@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: Set[str]
 
+    # Unleashed API
+    API_ID: str
+    API_KEY: str
+    BASE_URL: str
+
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

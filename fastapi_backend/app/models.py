@@ -635,6 +635,7 @@ class TCustomerProductProfileDetails(Base):
     AccountCode: Mapped[str] = mapped_column(String(255, 'Latin1_General_CI_AS'), nullable=False)
 
 
+from sqlalchemy import Identity
 class TCustomers(Base):
     __tablename__ = 'tCustomers'
     __table_args__ = (
@@ -643,7 +644,11 @@ class TCustomers(Base):
         Index('IX_tCustomers_Name', 'Name', mssql_clustered=False, mssql_include=[])
     )
 
-    CustomerID: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    CustomerID: Mapped[int] = mapped_column(
+    Integer, Identity(start=1, increment=1), primary_key=True
+    )
+    CustomerCode: Mapped[str] = mapped_column(String(10, 'Latin1_General_CI_AS'), nullable=True)
     CardRecordID: Mapped[int] = mapped_column(Integer, nullable=False)
     CardIdentification: Mapped[str] = mapped_column(Unicode(16, 'Latin1_General_CI_AS'), nullable=False)
     Name: Mapped[str] = mapped_column(String(255, 'Latin1_General_CI_AS'), nullable=False)
@@ -652,7 +657,7 @@ class TCustomers(Base):
     IsIndividual: Mapped[str] = mapped_column(Unicode(1, 'Latin1_General_CI_AS'), nullable=False)
     IsInactive: Mapped[str] = mapped_column(Unicode(1, 'Latin1_General_CI_AS'), nullable=False)
     Notes: Mapped[str] = mapped_column(Unicode(255, 'Latin1_General_CI_AS'), nullable=False)
-    IdentifierID: Mapped[str] = mapped_column(Unicode(26, 'Latin1_General_CI_AS'), nullable=False)
+    IdentifierID: Mapped[str] = mapped_column(Unicode(52, 'Latin1_General_CI_AS'), nullable=False)
     CustomField1: Mapped[str] = mapped_column(Unicode(255, 'Latin1_General_CI_AS'), nullable=False)
     CustomField2: Mapped[str] = mapped_column(Unicode(255, 'Latin1_General_CI_AS'), nullable=False)
     CustomField3: Mapped[str] = mapped_column(Unicode(255, 'Latin1_General_CI_AS'), nullable=False)
@@ -1550,10 +1555,12 @@ class TItems(Base):
         Index('IX_tItems_Change_Control', 'ChangeControl', mssql_clustered=False, mssql_include=[]),
         Index('IX_tItems_CustomField1', 'CustomField1', mssql_clustered=False, mssql_include=[]),
         Index('IX_tItems_CustomField2', 'CustomField2', mssql_clustered=False, mssql_include=[]),
-        Index('IX_tItems_CustomField3', 'CustomField3', mssql_clustered=False, mssql_include=[])
+        Index('IX_tItems_CustomField3', 'CustomField3', mssql_clustered=False, mssql_include=[]),
+        {"implicit_returning": False}
     )
 
-    ItemID: Mapped[int] = mapped_column(Integer, primary_key=True)
+    UnleashedGUID: Mapped[Optional[str]] = mapped_column('UnleashedGUID', Unicode(36, 'Latin1_General_CI_AS'), unique=True, nullable=True)
+    ItemID: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     IsInactive: Mapped[str] = mapped_column(Unicode(1, 'Latin1_General_CI_AS'), nullable=False)
     ItemNumber: Mapped[str] = mapped_column(Unicode(55, 'Latin1_General_CI_AS'), nullable=False)
     QuantityOnHand: Mapped[float] = mapped_column(Float(53), nullable=False)
@@ -1967,7 +1974,10 @@ class TOSTINVENTORYCOUNTS(Base):
     TOITEM: Mapped[Optional[str]] = mapped_column(String(50, 'Latin1_General_CI_AS'))
     CYCLECODE: Mapped[Optional[str]] = mapped_column(String(10, 'Latin1_General_CI_AS'))
     ABCCLASS: Mapped[Optional[str]] = mapped_column(String(1, 'Latin1_General_CI_AS'))
-    COUNTNOTES: Mapped[Optional[str]] = mapped_column(TEXT(16, 'Latin1_General_CI_AS'))
+    COUNTNOTES: Mapped[Optional[str]] = mapped_column(
+        Unicode(16, collation="Latin1_General_CI_AS"),
+        nullable=True
+    )
     SYSDATECREATED: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     SYSDATEMODIFIED: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     SYSUSERCREATED: Mapped[Optional[str]] = mapped_column(String(30, 'Latin1_General_CI_AS'))
