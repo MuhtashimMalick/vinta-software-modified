@@ -50,7 +50,7 @@ coverage.xml
 .hypothesis/
 
 # Logging
-logs/
+# logs/
 *.log
 .pytest_cache/
 cover/
