@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowRightIcon,
   ArrowLeftIcon,
@@ -19,16 +19,18 @@ import { ArrowsRightLeftIcon } from "@heroicons/react/24/solid";
 import { clsx } from "clsx";
 import axios from "axios";
 
+import Loader from "@/components/ui/loader";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type LogStatus = "Success" | "In Progress" | "Error";
+type LogStatus = "Success" | "Skipped" | "In Progress" | "Error";
 
 interface ActivityLog {
-  id: number;
+  id: string;
   timestamp: string;
   actionType: string;
   actionVariant:
-    | "import-pda"
+    | "import-from-pda-to-sql"
     | "export-unleashed"
     | "export-pda"
     | "import-erp";
@@ -38,60 +40,60 @@ interface ActivityLog {
 
 // ─── Sample Data ──────────────────────────────────────────────────────────────
 
-const SAMPLE_LOGS: ActivityLog[] = [
-  {
-    id: 1,
-    timestamp: "2023-10-27 14:30:22",
-    actionType: "Import PDA",
-    actionVariant: "import-pda",
-    status: "Success",
-    message: "Successfully synced 154 inventory items from PDA Group A.",
-  },
-  {
-    id: 2,
-    timestamp: "2023-10-27 14:15:05",
-    actionType: "Export Unleashed",
-    actionVariant: "export-unleashed",
-    status: "In Progress",
-    message: "Processing purchase orders for Q4 replenishment...",
-  },
-  {
-    id: 3,
-    timestamp: "2023-10-27 13:45:10",
-    actionType: "Export PDA",
-    actionVariant: "export-pda",
-    status: "Error",
-    message:
-      "Connection timeout: Could not reach SQL Server instance PDA_DB_01.",
-  },
-  {
-    id: 4,
-    timestamp: "2023-10-27 12:00:00",
-    actionType: "Import ERP",
-    actionVariant: "import-erp",
-    status: "Success",
-    message: "Master product list updated from Unleashed API.",
-  },
-];
+// const SAMPLE_LOGS: ActivityLog[] = [
+//   {
+//     id: 1,
+//     timestamp: "2023-10-27 14:30:22",
+//     actionType: "Import PDA",
+//     actionVariant: "import-pda",
+//     status: "Success",
+//     message: "Successfully synced 154 inventory items from PDA Group A.",
+//   },
+//   {
+//     id: 2,
+//     timestamp: "2023-10-27 14:15:05",
+//     actionType: "Export Unleashed",
+//     actionVariant: "export-unleashed",
+//     status: "In Progress",
+//     message: "Processing purchase orders for Q4 replenishment...",
+//   },
+//   {
+//     id: 3,
+//     timestamp: "2023-10-27 13:45:10",
+//     actionType: "Export PDA",
+//     actionVariant: "export-pda",
+//     status: "Error",
+//     message:
+//       "Connection timeout: Could not reach SQL Server instance PDA_DB_01.",
+//   },
+//   {
+//     id: 4,
+//     timestamp: "2023-10-27 12:00:00",
+//     actionType: "Import ERP",
+//     actionVariant: "import-erp",
+//     status: "Success",
+//     message: "Master product list updated from Unleashed API.",
+//   },
+// ];
 
-const OLDER_LOGS: ActivityLog[] = [
-  {
-    id: 5,
-    timestamp: "2023-10-27 10:30:00",
-    actionType: "Import PDA",
-    actionVariant: "import-pda",
-    status: "Success",
-    message: "Successfully synced 98 inventory items from PDA Group B.",
-  },
-  {
-    id: 6,
-    timestamp: "2023-10-27 09:00:00",
-    actionType: "Export Unleashed",
-    actionVariant: "export-unleashed",
-    status: "Success",
-    message: "Exported 212 purchase orders to Unleashed ERP.",
-  },
-];
+// const OLDER_LOGS: ActivityLog[] = [
+//   {
+//     id: 5,
+//     timestamp: "2023-10-27 10:30:00",
+//     actionType: "Import PDA",
+//     actionVariant: "import-pda",
+//     status: "Success",
+//     message: "Successfully synced 98 inventory items from PDA Group B.",
+//   },
+//   {
+//     id: 6,
+//     timestamp: "2023-10-27 09:00:00",
+//     actionType: "Export Unleashed",
+//     actionVariant: "export-unleashed",
+//     status: "Success",
+//     message: "Exported 212 purchase orders to Unleashed ERP.",
+//   },
+// ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -102,7 +104,7 @@ function StatusBadge({ status }: { status: LogStatus }) {
         "inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold border",
         status === "Success" &&
           "bg-green-500/20 text-green-400 border-green-500/30",
-        status === "In Progress" &&
+        ["In Progress", "Skipped"].includes(status) &&
           "bg-orange-500/20 text-orange-400 border-orange-500/30",
         status === "Error" && "bg-red-500/20 text-red-400 border-red-500/30",
       )}
@@ -122,7 +124,7 @@ function ActionCell({
   const iconClass = "w-4 h-4 shrink-0 text-blue-400";
 
   const icon =
-    variant === "import-pda" || variant === "import-erp" ? (
+    variant === "import-from-pda-to-sql" || variant === "import-erp" ? (
       <ArrowDownTrayIcon className={iconClass} />
     ) : variant === "export-unleashed" ? (
       <ArrowUpTrayIcon className={iconClass} />
@@ -142,7 +144,9 @@ function ActionCell({
 
 export default function DataSyncDashboard() {
   const [showOlder, setShowOlder] = useState(false);
-  const [logs, setLogs] = useState<ActivityLog[]>(SAMPLE_LOGS);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
@@ -153,12 +157,97 @@ export default function DataSyncDashboard() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const visibleLogs = showOlder ? [...logs, ...OLDER_LOGS] : logs;
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch("/api/logs");
+        console.log(res);
+        if (!res.ok) throw new Error("Failed to fetch logs");
+        const data = await res.json();
+        setLogs(data);
+      } catch (err) {
+        setError("Could not load activity logs.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const visibleLogs = logs;
+  console.log(visibleLogs);
+
+  async function importFromPDAToSQL() {
+    const newLog: ActivityLog = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      actionType: "Import from PDA to SQL",
+      actionVariant: "import-from-pda-to-sql",
+      status: "In Progress",
+      message: "Importing XML files from PDA into SQL...",
+    };
+    setLogs((prev) => [newLog, ...prev]);
+
+    try {
+      const response = await axios.post(
+        "http://localhost:8000/sales/import-remote-xml",
+        null,
+        { headers: { accept: "application/json" } },
+      );
+
+      const { imported, skipped, failed } = response.data;
+
+      // Build a summary message from the counts the endpoint returns
+      const parts = [];
+      if (imported.length > 0) parts.push(`${imported.length} imported`);
+      if (skipped.length > 0) parts.push(`${skipped.length} skipped`);
+      if (failed.length > 0) parts.push(`${failed.length} failed`);
+
+      const summary = parts.length > 0 ? parts.join(", ") : "No XML files found in directory.";
+      const hasFailures = failed.length > 0;
+
+      setLogs((prev) =>
+        prev.map((l) =>
+          l.id === newLog.id
+            ? {
+                ...l,
+                status: hasFailures ? "Error" : "Success",
+                message: `Import complete — ${summary}.`,
+              }
+            : l,
+        ),
+      );
+
+      showToast(
+        hasFailures
+          ? `Import finished with errors — ${summary}.`
+          : `Import complete — ${summary}.`,
+        hasFailures ? "error" : "success",
+      );
+    } catch {
+      setLogs((prev) =>
+        prev.map((l) =>
+          l.id === newLog.id
+            ? {
+                ...l,
+                status: "Error",
+                message: "Import failed: Could not reach the import endpoint.",
+              }
+            : l,
+        ),
+      );
+      showToast("Import failed. Could not reach the server.", "error");
+    }
+  }
 
   async function exportFromSQLToUnleashed() {
     const newLog: ActivityLog = {
-      id: Date.now(),
-      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
+      id: "1",
+      timestamp: "1",
       actionType: "Export Unleashed",
       actionVariant: "export-unleashed",
       status: "In Progress",
@@ -289,7 +378,7 @@ export default function DataSyncDashboard() {
 
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => console.log("Import from PDA")}
+                onClick={() => importFromPDAToSQL()}
                 className="bg-blue-500 hover:bg-blue-600 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 font-semibold cursor-pointer"
               >
                 <ArrowDownTrayIcon className="w-7 h-7" />
@@ -352,7 +441,8 @@ export default function DataSyncDashboard() {
           </button>
         </div>
 
-        <div className="bg-[#1a2030] rounded-xl border border-white/[0.06] overflow-hidden">
+        <div className="relative bg-[#1a2030] rounded-xl border border-white/[0.06] overflow-hidden">
+          {loading && <Loader text="Loading logs..." />}
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/[0.06]">
@@ -371,30 +461,65 @@ export default function DataSyncDashboard() {
               </tr>
             </thead>
             <tbody>
-              {visibleLogs.map((log, idx) => (
-                <tr
-                  key={log.id}
-                  className={clsx(
-                    "hover:bg-white/[0.025] transition-colors",
-                    idx < visibleLogs.length - 1 &&
-                      "border-b border-white/[0.06]",
-                  )}
-                >
-                  <td className="px-5 py-4 font-mono text-xs text-gray-400 whitespace-nowrap">
-                    {log.timestamp}
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-5 py-12 text-center text-gray-400 text-sm"
+                  >
+                    Loading activity logs...
                   </td>
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <ActionCell
-                      variant={log.actionVariant}
-                      label={log.actionType}
-                    />
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <StatusBadge status={log.status} />
-                  </td>
-                  <td className="px-5 py-4 text-gray-300">{log.message}</td>
                 </tr>
-              ))}
+              ) : error ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-5 py-12 text-center text-red-400 text-sm"
+                  >
+                    {error}
+                  </td>
+                </tr>
+              ) : visibleLogs.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-5 py-12 text-center text-gray-500 text-sm"
+                  >
+                    No activity logs for today.
+                  </td>
+                </tr>
+              ) : (
+                visibleLogs.map((log, idx) => (
+                  <tr
+                    key={log.id}
+                    className={clsx(
+                      "hover:bg-white/[0.025] transition-colors",
+                      idx < visibleLogs.length - 1 &&
+                        "border-b border-white/[0.06]",
+                    )}
+                  >
+                    <td className="px-5 py-4 font-mono text-xs text-gray-400 whitespace-nowrap">
+                      {new Date(log.timestamp).toLocaleString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      <ActionCell
+                        variant={log.actionVariant}
+                        label={log.actionType}
+                      />
+                    </td>
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      <StatusBadge status={log.status} />
+                    </td>
+                    <td className="px-5 py-4 text-gray-300">{log.message}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
 
