@@ -12,10 +12,7 @@ from .models import User
 
 parsed_db_url = urlparse(settings.DATABASE_URL)
 
-async_db_connection_url = (
-    "mssql+aioodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB_test?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes"
-
-)
+async_db_connection_url = ("mssql+aioodbc:///?odbc_connect=DRIVER%3D%7BSQL+Server+Native+Client+10.0%7D%3BSERVER%3Dnp%3A%5C%5C.%5Cpipe%5CMSSQL%24SQLEXPRESSRICG%5Csql%5Cquery%3BDATABASE%3DMYOBPremierMirrorDB_test%3BUID%3Dsa%3BPWD%3Dpwd%24123")
 
 # Disable connection pooling for serverless environments like Vercel
 engine = create_async_engine(async_db_connection_url, poolclass=NullPool)
