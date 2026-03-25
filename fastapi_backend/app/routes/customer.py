@@ -1,37 +1,25 @@
 # app/routers/unleashed.py
 
-import logging
-from fastapi import APIRouter, Depends, Body, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import select
-from typing import List
-import requests
-import base64
-import hashlib
-import hmac
-import json
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import  get_async_session
-from app.models import (
-    TRICGPDAMobileSalesHeader,
-    TRICGPDAMobileSalesOrdersLine,
-    TREMOTETransCustomer,
-    TREMOTETransSaleLines,
-    TREMOTETransHeader,
-    TREMOTETransSaleTenders,
-    TREMOTETransSaleLineSerials,
-    TCustomers,
-    TTaxCodes,
-    TShippingMethods
-)
 import datetime
+import logging
+import requests
+
 from decimal import Decimal
 
-# Get logger
-logger = logging.getLogger(__name__)
-router = APIRouter()
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import  get_async_session
+from app.models import TCustomers
 from app.utils import get_headers
 from app.config import settings
+from app.logging_config import get_jsonl_logger, build_jsonl_entry
+
+
+jsonl_logger = get_jsonl_logger()
+logger = logging.getLogger(__name__)
+router = APIRouter()
 
 
 def safe(value):
@@ -440,6 +428,12 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
             except Exception as e:
                 failed_count += 1
                 error_msg = f"Error importing customer {unleashed_customer.get('CustomerCode', 'Unknown')}: {str(e)}"
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Import from Unleashed to SQL",
+                    action_variant="import-from-unleashed-to-sql",
+                    status="Error",
+                    message=error_msg,
+                ))
                 logger.error(error_msg)
                 errors.append(error_msg)
         
@@ -447,6 +441,12 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
         await session.commit()
         
         logger.info(f"Successfully imported {imported_count} customers to SQL database")
+        jsonl_logger.info(build_jsonl_entry(
+            action_type="Import from Unleashed to SQL",
+            action_variant="import-from-unleashed-to-sql",
+            status="Success",
+            message=f"Successfully imported {imported_count} customers to SQL database with {failed_count} failures and {already_present_count} already present.",
+        ))
         
         return {
             "status": "success",
@@ -460,6 +460,12 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
         }
         
     except Exception as e:
+        jsonl_logger.info(build_jsonl_entry(
+            action_type="Import from Unleashed to SQL",
+            action_variant="import-from-unleashed-to-sql",
+            status="Error",
+            message=f"Error importing customers: {str(e)}",
+        ))
         logger.error(f"Error importing customers: {str(e)}")
         await session.rollback()
         raise HTTPException(
