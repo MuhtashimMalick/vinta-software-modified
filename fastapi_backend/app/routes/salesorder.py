@@ -276,7 +276,8 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                 "OrderStatus": "Parked",
                 # "OrderStatus": "Completed" if header.ClosedYN == 'Y' else "Parked", #need to understand this status
                 "Customer": {
-                    "CustomerCode": header.CustomerID.strip() if getattr(header, 'CustomerID', None) else None,
+                    "CustomerCode": tcust.CardIdentification,
+                    # "CustomerCode": header.CustomerID.strip() if getattr(header, 'CustomerID', None) else None,
                     # "CustomerCode": '1ETC',
                     # "CustomerName": customer_name
                 },
@@ -333,8 +334,15 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                 else:
                     logger.error(f"Failed to export order: {response.text}")
                     results.append({"order_id": header.TransID.strip(), "status": "failed", "error": response.text})
+                    raise Exception(f"Failed to export order: {response.text}")
                 logger.debug("Order processing completed")
             except Exception as e:
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Export from SQL to Unleashed",
+                    action_variant="export-from-sql-to-unleashed",
+                    status="Error",
+                    message=str(e),
+                ))
                 logger.exception(f"Exception processing order: {e}")
                 results.append({"order_id": header.TransID.strip(), "status": "error", "error": str(e)})
         logger.info(f"Sales order export completed: {len(results)} processed")
@@ -358,8 +366,10 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
 
 @router.post("/import-remote-xml", status_code=201)
 async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
-    XML_IMPORT_DIR = "/app/xml_input_dir"
-    XML_PROCESSED_DIR = "/app/app/xml_processed_dir"
+    # XML_IMPORT_DIR = "/app/xml_input_dir"
+    # XML_PROCESSED_DIR = "/app/app/xml_processed_dir"
+    XML_IMPORT_DIR = r"C:\xml_input"  
+    XML_PROCESSED_DIR = r"C:\xml_processed"
     if not os.path.isdir(XML_IMPORT_DIR):
         raise HTTPException(status_code=500, detail=f"Import directory not found: {XML_IMPORT_DIR}")
     xml_files = [f for f in os.listdir(XML_IMPORT_DIR) if f.endswith(".xml")]
@@ -476,6 +486,7 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
 
             header_obj = TREMOTETransHeader(**header_kwargs)
             db.add(header_obj)
+            await db.flush()
 
             # customer
             customer_elem = root.find('.//tTransCustomer')
@@ -509,6 +520,7 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
 
                 cust_obj = TREMOTETransCustomer(**cust_kwargs)
                 db.add(cust_obj)
+                await db.flush()
 
             # sale lines (may be many)
             for line_elem in root.findall('.//tTransSaleLines'):
@@ -538,6 +550,7 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
 
                     sale_obj = TREMOTETransSaleLines(**sale_line_kwargs)
                     db.add(sale_obj)
+                    await db.flush()
                 except Exception:
                     # skip malformed lines but continue processing
                     continue
@@ -564,6 +577,7 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
 
                     tender_obj = TREMOTETransSaleTenders(**tender_kwargs)
                     db.add(tender_obj)
+                    await db.flush()
                 except Exception:
                     # skip malformed tenders but continue
                     continue
