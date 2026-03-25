@@ -13,7 +13,7 @@ from .models import User
 parsed_db_url = urlparse(settings.DATABASE_URL)
 
 async_db_connection_url = (
-    "mssql+aioodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes"
+    "mssql+aioodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB_test?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes"
 
 )
 
