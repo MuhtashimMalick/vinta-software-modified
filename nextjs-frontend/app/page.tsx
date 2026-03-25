@@ -31,69 +31,11 @@ interface ActivityLog {
   actionType: string;
   actionVariant:
     | "import-from-pda-to-sql"
-    | "export-unleashed"
-    | "export-pda"
-    | "import-erp";
+    | "export-from-sql-to-unleashed"
+    | "import-from-unleashed-to-sql";
   status: LogStatus;
   message: string;
 }
-
-// ─── Sample Data ──────────────────────────────────────────────────────────────
-
-// const SAMPLE_LOGS: ActivityLog[] = [
-//   {
-//     id: 1,
-//     timestamp: "2023-10-27 14:30:22",
-//     actionType: "Import PDA",
-//     actionVariant: "import-pda",
-//     status: "Success",
-//     message: "Successfully synced 154 inventory items from PDA Group A.",
-//   },
-//   {
-//     id: 2,
-//     timestamp: "2023-10-27 14:15:05",
-//     actionType: "Export Unleashed",
-//     actionVariant: "export-unleashed",
-//     status: "In Progress",
-//     message: "Processing purchase orders for Q4 replenishment...",
-//   },
-//   {
-//     id: 3,
-//     timestamp: "2023-10-27 13:45:10",
-//     actionType: "Export PDA",
-//     actionVariant: "export-pda",
-//     status: "Error",
-//     message:
-//       "Connection timeout: Could not reach SQL Server instance PDA_DB_01.",
-//   },
-//   {
-//     id: 4,
-//     timestamp: "2023-10-27 12:00:00",
-//     actionType: "Import ERP",
-//     actionVariant: "import-erp",
-//     status: "Success",
-//     message: "Master product list updated from Unleashed API.",
-//   },
-// ];
-
-// const OLDER_LOGS: ActivityLog[] = [
-//   {
-//     id: 5,
-//     timestamp: "2023-10-27 10:30:00",
-//     actionType: "Import PDA",
-//     actionVariant: "import-pda",
-//     status: "Success",
-//     message: "Successfully synced 98 inventory items from PDA Group B.",
-//   },
-//   {
-//     id: 6,
-//     timestamp: "2023-10-27 09:00:00",
-//     actionType: "Export Unleashed",
-//     actionVariant: "export-unleashed",
-//     status: "Success",
-//     message: "Exported 212 purchase orders to Unleashed ERP.",
-//   },
-// ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -124,9 +66,10 @@ function ActionCell({
   const iconClass = "w-4 h-4 shrink-0 text-blue-400";
 
   const icon =
-    variant === "import-from-pda-to-sql" || variant === "import-erp" ? (
+    variant === "import-from-pda-to-sql" ||
+    variant === "import-from-unleashed-to-sql" ? (
       <ArrowDownTrayIcon className={iconClass} />
-    ) : variant === "export-unleashed" ? (
+    ) : variant === "export-from-sql-to-unleashed" ? (
       <ArrowUpTrayIcon className={iconClass} />
     ) : (
       <ArrowRightCircleIcon className={iconClass} />
@@ -142,19 +85,40 @@ function ActionCell({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+const LOGS_PAGE_SIZE = 5;
+
 export default function DataSyncDashboard() {
   const [showOlder, setShowOlder] = useState(false);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
   } | null>(null);
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+  const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
+
+  const setActionLoading = (action: string, value: boolean) => {
+    setLoadingActions((prev) => {
+      const next = new Set(prev);
+      value ? next.add(action) : next.delete(action);
+      return next;
+    });
+  };
+
+  const toggleLog = (id: string) => {
+    setExpandedLogs((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), 40000);
   };
 
   useEffect(() => {
@@ -169,7 +133,7 @@ export default function DataSyncDashboard() {
         setError("Could not load activity logs.");
         console.error(err);
       } finally {
-        setLoading(false);
+        setLogsLoading(false);
       }
     };
 
@@ -178,10 +142,11 @@ export default function DataSyncDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const visibleLogs = logs;
-  console.log(visibleLogs);
+  const visibleLogs = showOlder ? logs : logs.slice(0, LOGS_PAGE_SIZE);
+  const hasMoreLogs = logs.length > LOGS_PAGE_SIZE;
 
   async function importFromPDAToSQL() {
+    setActionLoading("import-from-pda-to-sql", true);
     const newLog: ActivityLog = {
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
@@ -201,13 +166,15 @@ export default function DataSyncDashboard() {
 
       const { imported, skipped, failed } = response.data;
 
-      // Build a summary message from the counts the endpoint returns
       const parts = [];
       if (imported.length > 0) parts.push(`${imported.length} imported`);
       if (skipped.length > 0) parts.push(`${skipped.length} skipped`);
       if (failed.length > 0) parts.push(`${failed.length} failed`);
 
-      const summary = parts.length > 0 ? parts.join(", ") : "No XML files found in directory.";
+      const summary =
+        parts.length > 0
+          ? parts.join(", ")
+          : "No XML files found in directory.";
       const hasFailures = failed.length > 0;
 
       setLogs((prev) =>
@@ -216,7 +183,7 @@ export default function DataSyncDashboard() {
             ? {
                 ...l,
                 status: hasFailures ? "Error" : "Success",
-                message: `Import complete — ${summary}.`,
+                message: `${summary}.`,
               }
             : l,
         ),
@@ -242,14 +209,16 @@ export default function DataSyncDashboard() {
       );
       showToast("Import failed. Could not reach the server.", "error");
     }
+    setActionLoading("import-from-pda-to-sql", false);
   }
 
   async function exportFromSQLToUnleashed() {
+    setActionLoading("export-from-sql-to-unleashed", true);
     const newLog: ActivityLog = {
-      id: "1",
-      timestamp: "1",
-      actionType: "Export Unleashed",
-      actionVariant: "export-unleashed",
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      actionType: "Export from SQL to Unleashed",
+      actionVariant: "export-from-sql-to-unleashed",
       status: "In Progress",
       message: "Exporting sales orders from SQL to Unleashed...",
     };
@@ -291,6 +260,62 @@ export default function DataSyncDashboard() {
       );
       showToast("Export failed. Could not reach the server.", "error");
     }
+    setActionLoading("export-from-sql-to-unleashed", false);
+  }
+
+  async function importFromUnleashedToSQL() {
+    setActionLoading("import-from-unleashed-to-sql", true);
+    const newLog: ActivityLog = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      actionType: "Import from Unleashed to SQL",
+      actionVariant: "import-from-unleashed-to-sql",
+      status: "In Progress",
+      message: "Importing customers and products from Unleashed...",
+    };
+    setLogs((prev) => [newLog, ...prev]);
+
+    try {
+      await axios.post(
+        "http://localhost:8000/customers/import-customers-from-unleashed",
+        null,
+        { headers: { accept: "application/json" } },
+      );
+
+      await axios.post("http://localhost:8000/products/import-products", null, {
+        headers: { accept: "application/json" },
+      });
+
+      setLogs((prev) =>
+        prev.map((l) =>
+          l.id === newLog.id
+            ? {
+                ...l,
+                status: "Success",
+                message:
+                  "Customers and products successfully imported from Unleashed.",
+              }
+            : l,
+        ),
+      );
+      showToast("Customers and products imported successfully.", "success");
+    } catch {
+      setLogs((prev) =>
+        prev.map((l) =>
+          l.id === newLog.id
+            ? {
+                ...l,
+                status: "Error",
+                message:
+                  "Import failed: Could not reach one or more Unleashed endpoints.",
+              }
+            : l,
+        ),
+      );
+      showToast("Import failed. Could not reach the server.", "error");
+    } finally {
+      setActionLoading("import-from-unleashed-to-sql", false);
+    }
   }
 
   return (
@@ -306,47 +331,19 @@ export default function DataSyncDashboard() {
             Data Sync Dashboard
           </span>
         </div>
-
-        {/* Right actions */}
-        <div className="flex items-center gap-2">
-          {/* Connection badge */}
-          <div className="flex items-center gap-1.5 border border-green-500/40 bg-green-500/10 text-green-400 text-xs font-bold px-3 py-1.5 rounded-md tracking-wide uppercase">
-            <span className="w-2 h-2 rounded-full bg-green-400" />
-            SQL Server Connected
-          </div>
-
-          <button
-            onClick={() => console.log("Settings")}
-            className="w-9 h-9 rounded-md bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
-          >
-            <Cog6ToothIcon className="w-5 h-5 text-gray-300" />
-          </button>
-
-          <button
-            onClick={() => console.log("Notifications")}
-            className="w-9 h-9 rounded-md bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
-          >
-            <BellIcon className="w-5 h-5 text-gray-300" />
-          </button>
-
-          {/* Avatar */}
-          <div className="w-9 h-9 rounded-full bg-orange-400 flex items-center justify-center font-bold text-white text-sm shrink-0">
-            J
-          </div>
-        </div>
       </header>
 
       {/* ── Main ───────────────────────────────────────────────────────────── */}
       <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-10">
         {/* Page heading */}
         <div className="mb-8">
-          <h1 className="text-[2rem] font-extrabold tracking-tight leading-tight">
+          {/* <h1 className="text-[2rem] font-extrabold tracking-tight leading-tight">
             Data Integration Overview
           </h1>
           <p className="text-gray-400 mt-1">
             Manage data synchronization between PDA systems and Unleashed ERP
             via SQL Server.
-          </p>
+          </p> */}
         </div>
 
         {/* ── Sync Cards ──────────────────────────────────────────────────── */}
@@ -356,7 +353,6 @@ export default function DataSyncDashboard() {
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                  {/* table/grid icon */}
                   <svg
                     className="w-5 h-5 text-blue-400"
                     fill="currentColor"
@@ -379,7 +375,13 @@ export default function DataSyncDashboard() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => importFromPDAToSQL()}
-                className="bg-blue-500 hover:bg-blue-600 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 font-semibold cursor-pointer"
+                disabled={loadingActions.has("import-from-pda-to-sql")}
+                className={`rounded-xl py-9 flex flex-col items-center gap-2 font-semibold transition-all
+                  ${
+                    loadingActions.has("import-from-pda-to-sql")
+                      ? "bg-gray-600 text-gray-300 cursor-not-allowed opacity-60"
+                      : "bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.97] cursor-pointer"
+                  }`}
               >
                 <ArrowDownTrayIcon className="w-7 h-7" />
                 <span className="text-sm">Import from PDA to SQL</span>
@@ -387,7 +389,13 @@ export default function DataSyncDashboard() {
 
               <button
                 onClick={() => exportFromSQLToUnleashed()}
-                className="border border-blue-400/50 hover:bg-blue-400/10 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 text-blue-400 font-semibold cursor-pointer"
+                disabled={loadingActions.has("export-from-sql-to-unleashed")}
+                className={`border rounded-xl py-9 flex flex-col items-center gap-2 font-semibold transition-all
+                  ${
+                    loadingActions.has("export-from-sql-to-unleashed")
+                      ? "border-gray-500/30 text-gray-500 cursor-not-allowed opacity-50"
+                      : "border-blue-400/50 text-blue-400 hover:bg-blue-400/10 active:scale-[0.97] cursor-pointer"
+                  }`}
               >
                 <ArrowUpTrayIcon className="w-7 h-7" />
                 <span className="text-sm">Export from SQL to Unleashed</span>
@@ -400,7 +408,6 @@ export default function DataSyncDashboard() {
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                  {/* database icon */}
                   <svg
                     className="w-5 h-5 text-blue-400"
                     fill="currentColor"
@@ -420,8 +427,14 @@ export default function DataSyncDashboard() {
 
             <div className="flex justify-center">
               <button
-                onClick={() => console.log("Import from ERP")}
-                className="bg-blue-500 hover:bg-blue-600 active:scale-[0.97] transition-all rounded-xl py-9 flex flex-col items-center gap-2 font-semibold cursor-pointer w-[calc(50%-6px)]"
+                onClick={() => importFromUnleashedToSQL()}
+                disabled={loadingActions.has("import-from-unleashed-to-sql")}
+                className={`w-[calc(50%-6px)] rounded-xl py-9 flex flex-col items-center gap-2 font-semibold transition-all
+                  ${
+                    loadingActions.has("import-from-unleashed-to-sql")
+                      ? "bg-gray-600 text-gray-300 cursor-not-allowed opacity-60"
+                      : "bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.97] cursor-pointer"
+                  }`}
               >
                 <CloudArrowDownIcon className="w-7 h-7" />
                 <span className="text-sm">Import from Unleashed to SQL</span>
@@ -433,16 +446,16 @@ export default function DataSyncDashboard() {
         {/* ── Activity Logs ────────────────────────────────────────────────── */}
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">Activity Logs</h2>
-          <button
+          {/* <button
             onClick={() => console.log("View Full Report")}
             className="text-blue-400 hover:text-blue-300 font-medium transition-colors text-sm"
           >
             View Full Report
-          </button>
+          </button> */}
         </div>
 
         <div className="relative bg-[#1a2030] rounded-xl border border-white/[0.06] overflow-hidden">
-          {loading && <Loader text="Loading logs..." />}
+          {logsLoading && <Loader text="Loading logs..." />}
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/[0.06]">
@@ -516,7 +529,31 @@ export default function DataSyncDashboard() {
                     <td className="px-5 py-4 whitespace-nowrap">
                       <StatusBadge status={log.status} />
                     </td>
-                    <td className="px-5 py-4 text-gray-300">{log.message}</td>
+                    <td className="px-5 py-4 text-gray-300">
+                      {log.message.length > 100 && !expandedLogs.has(log.id) ? (
+                        <>
+                          {log.message.slice(0, 100)}...{" "}
+                          <button
+                            onClick={() => toggleLog(log.id)}
+                            className="text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            See more
+                          </button>
+                        </>
+                      ) : log.message.length > 100 ? (
+                        <>
+                          {log.message}{" "}
+                          <button
+                            onClick={() => toggleLog(log.id)}
+                            className="text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            Show less
+                          </button>
+                        </>
+                      ) : (
+                        log.message
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -524,30 +561,31 @@ export default function DataSyncDashboard() {
           </table>
 
           {/* Load older */}
-          <div className="border-t border-white/[0.06] py-3 flex justify-center">
-            <button
-              onClick={() => {
-                setShowOlder((prev) => !prev);
-                console.log("Load older logs");
-              }}
-              className="flex items-center gap-1.5 text-gray-400 hover:text-gray-200 transition-colors text-sm cursor-pointer"
-            >
-              <ChevronDownIcon
-                className={clsx(
-                  "w-4 h-4 transition-transform",
-                  showOlder && "rotate-180",
-                )}
-              />
-              {showOlder ? "Hide older logs" : "Load older logs"}
-            </button>
-          </div>
+          {hasMoreLogs && (
+            <div className="border-t border-white/[0.06] py-3 flex justify-center">
+              <button
+                onClick={() => setShowOlder((prev) => !prev)}
+                className="flex items-center gap-1.5 text-gray-400 hover:text-gray-200 transition-colors text-sm cursor-pointer"
+              >
+                <ChevronDownIcon
+                  className={clsx(
+                    "w-4 h-4 transition-transform",
+                    showOlder && "rotate-180",
+                  )}
+                />
+                {showOlder
+                  ? "Hide older logs"
+                  : `Load older logs (${logs.length - LOGS_PAGE_SIZE} more)`}
+              </button>
+            </div>
+          )}
         </div>
       </main>
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="text-center py-5 text-xs text-gray-500 border-t border-white/[0.06]">
-        © 2023 Data Sync Engine v2.4.0 • Enterprise Edition • Connected to{" "}
-        <span className="text-blue-400 font-medium">SQL_PROD_CLUSTER</span>
+        {/* © 2023 Data Sync Engine v2.4.0 • Enterprise Edition • Connected to{" "} */}
+        {/* <span className="text-blue-400 font-medium">SQL_PROD_CLUSTER</span> */}
       </footer>
       {toast && (
         <div

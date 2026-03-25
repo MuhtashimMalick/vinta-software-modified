@@ -63,7 +63,7 @@ app.include_router(
 
 app.include_router(products_router, prefix="/products", tags=["products"])
 app.include_router(sales_router, prefix="/sales", tags=["sales"])
-app.include_router(customer, prefix="/cusotmers",tags=["customers"])
+app.include_router(customer, prefix="/customers",tags=["customers"])
 add_pagination(app)
 
 

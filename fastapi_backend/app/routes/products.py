@@ -1,11 +1,8 @@
 # app/routers/unleashed.py
 import asyncio
-import datetime
 import logging
 import httpx
 
-from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +11,10 @@ from sqlalchemy import select, func
 from app.database import  get_async_session
 from app.models import TItems
 from app.utils import fetch_all_unleashed_products, map_item, fetch_all_stock_on_hand
+from app.logging_config import get_jsonl_logger, build_jsonl_entry
 
 
+jsonl_logger = get_jsonl_logger()
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -38,8 +37,14 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
             fetch_all_unleashed_products(),
             fetch_all_stock_on_hand(),
         )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Unleashed API error: {exc}")
+    except httpx.HTTPError as e:
+        jsonl_logger.info(build_jsonl_entry(
+            action_type="Import from Unleashed to SQL",
+            action_variant="import-from-unleashed-to-sql",
+            status="Error",
+            message=f"Unleashed API error: {e}",
+        ))
+        raise HTTPException(status_code=502, detail=f"Unleashed API error: {e}")
 
     # -- Step 3: load existing GUIDs from DB in one query --
     existing_rows = (await db.execute(
@@ -92,6 +97,12 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
             updated += 1
  
     await db.commit()
+    jsonl_logger.info(build_jsonl_entry(
+        action_type="Import from Unleashed to SQL",
+        action_variant="import-from-unleashed-to-sql",
+        status="Success",
+        message=f"{inserted} products inserted, {updated} products updated, {skipped} products skipped",
+    ))
     return {
         "status": "success",
         "total_from_api": len(products),
