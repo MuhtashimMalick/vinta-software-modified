@@ -497,6 +497,7 @@ async def import_remote_xml(xml: str = Body(..., media_type="application/xml"), 
 
             sale_obj = TREMOTETransSaleLines(**sale_line_kwargs)
             db.add(sale_obj)
+            await db.flush()
         except Exception:
             # skip malformed lines but continue processing
             continue
