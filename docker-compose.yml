@@ -4,14 +4,15 @@ services:
       context: fastapi_backend
     environment:
       - OPENAPI_OUTPUT_FILE=./shared-data/openapi.json
-      - DATABASE_URL=mssql+aioodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes
-      - DATABASE_SYNC_URL=mssql+pyodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes
+      - DATABASE_URL=mssql+aioodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB_test?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes
+      - DATABASE_SYNC_URL=mssql+pyodbc://docker_user:DockerPass123@host.docker.internal/MYOBPremierMirrorDB_test?driver=ODBC%20Driver%2018%20for%20SQL%20Server&TrustServerCertificate=yes
       # - TEST_DATABASE_URL=postgresql+asyncpg://postgres:password@db:5433/testdatabase
     ports:
       - "8000:8000"
     networks:
       - my_network
     volumes:
+      - ../xml_input_dir:/app/xml_input_dir
       - ./fastapi_backend:/app
       - fastapi-venv:/app/.venv
       - ./local-shared-data:/app/shared-data
