@@ -1,15 +1,17 @@
 # app/routers/unleashed.py
 import datetime
 import logging
+import os
 import requests
+import shutil
 
 from defusedxml import ElementTree as ET
 from dateutil import parser as dateutil_parser
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select
 
 from app.database import  get_async_session
 from app.config import settings
@@ -18,12 +20,14 @@ from app.models import (
     TREMOTETransSaleLines,
     TREMOTETransHeader,
     TREMOTETransSaleTenders,
-    TREMOTETransSaleLineSerials,
     TCustomers,
     TTaxCodes,
     TShippingMethods
 )
 from app.utils import get_headers
+from app.logging_config import get_jsonl_logger, build_jsonl_entry
+
+jsonl_logger = get_jsonl_logger()
 
 
 # Get logger
@@ -144,6 +148,12 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
         headers = result.scalars().all()
         logger.debug(f"Found {len(headers)} unsent headers")
         if not headers:
+            jsonl_logger.info(build_jsonl_entry(
+                action_type="Export from SQL to Unleashed",
+                action_variant="export-from-sql-to-unleashed",
+                status="Skipped",
+                message=f"No unexported sales orders found.",
+            ))
             logger.info("No unexported sales orders found")
             return {"message": "No unexported sales orders found"}
 
@@ -195,7 +205,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                     cust_id = None
 
                 if cust_id is not None: #what if cust is not present in the tcustomer table should we return cust not present in our system 
-                    tcust_res = await db.execute(select(TCustomers).where(TCustomers.CustomerID == '145').limit(1))
+                    tcust_res = await db.execute(select(TCustomers).where(TCustomers.CustomerID == header.CustomerID).limit(1))
                     tcust = tcust_res.scalars().first()
                     logger.debug(f"Retrieved TCustomer record: {tcust}")
                     if tcust and getattr(tcust, 'TaxCodeID', None) is not None:
@@ -257,18 +267,22 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
 
             total = sub_total + tax_total
 
+
             payload = {
                 "SalesOrderLines": sales_lines_payload,
                 "OrderNumber": header.TransID.strip() if header.TransID else None,
                 "OrderDate": header.PostingDate.strftime("%Y-%m-%d") if header.PostingDate else None,
                 "RequiredDate": header.PostingDate.strftime("%Y-%m-%d") if header.PostingDate else None,
-                "OrderStatus": "Completed" if header.ClosedYN == 'Y' else "Parked", #need to understand this status
+                "OrderStatus": "Parked",
+                # "OrderStatus": "Completed" if header.ClosedYN == 'Y' else "Parked", #need to understand this status
                 "Customer": {
-                    "CustomerCode": '1ETC',
+                    "CustomerCode": header.CustomerID.strip() if getattr(header, 'CustomerID', None) else None,
+                    # "CustomerCode": '1ETC',
                     # "CustomerName": customer_name
                 },
                 "Warehouse": {
-                    "WarehouseCode": "GOS" #header.TILL.strip() if header.TILL else None          ask them to make correct warehouse codes in unleashed 
+                    "WarehouseCode": header.StoreCode.strip() if getattr(header, 'StoreCode', None) else None
+                    # "WarehouseCode": "GOS" #header.TILL.strip() if header.TILL else None          ask them to make correct warehouse codes in unleashed 
                 },
                 "Currency": {
                     "CurrencyCode": "AUD" #lines[0].CurrencyCode.strip() if getattr(lines[0], 'CurrencyCode', None) else None
@@ -324,211 +338,261 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                 logger.exception(f"Exception processing order: {e}")
                 results.append({"order_id": header.TransID.strip(), "status": "error", "error": str(e)})
         logger.info(f"Sales order export completed: {len(results)} processed")
+        jsonl_logger.info(build_jsonl_entry(
+            action_type="Export from SQL to Unleashed",
+            action_variant="export-from-sql-to-unleashed",
+            status="Success",
+            message=f"Sales order export completed: {len(results)} processed",
+        ))
         return {"processed": len(results), "results": results}
     except Exception as e:
+        jsonl_logger.info(build_jsonl_entry(
+            action_type="Export from SQL to Unleashed",
+            action_variant="export-from-sql-to-unleashed",
+            status="Error",
+            message=f"Critical error in export_sales_orders: {e}",
+        ))
         logger.exception(f"Critical error in export_sales_orders: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/import-remote-xml", status_code=201)
-async def import_remote_xml(xml: str = Body(..., media_type="application/xml"), db: AsyncSession = Depends(get_async_session)):
-    try:
-        root = ET.fromstring(xml)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid XML: {e}")
+async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
+    XML_IMPORT_DIR = "/app/xml_input_dir"
+    XML_PROCESSED_DIR = "/app/app/xml_processed_dir"
+    if not os.path.isdir(XML_IMPORT_DIR):
+        raise HTTPException(status_code=500, detail=f"Import directory not found: {XML_IMPORT_DIR}")
+    xml_files = [f for f in os.listdir(XML_IMPORT_DIR) if f.endswith(".xml")]
 
-    # find header, customer and lines
-    header_elem = root.find('.//tREMOTETransHeader')
-    if header_elem is None:
-        raise HTTPException(status_code=400, detail="Missing tREMOTETransHeader element")
+    if not xml_files:
+        jsonl_logger.info(build_jsonl_entry(
+            action_type="Import from PDA to SQL",
+            action_variant="import-from-pda-to-sql",
+            status="Success",
+            message=f"No XML files found in directory.",
+        ))
+        return {"message": "No XML files found in directory.", "imported": [], "skipped": [], "failed": []}
+    imported = []
+    skipped = []
+    failed = []
 
-    def text(e, tag):
-        c = e.find(tag)
-        return c.text.strip() if (c is not None and c.text is not None) else None
-
-    def parse_dt(val):
-        if not val:
-            return None
+    for filename in xml_files:
+        filepath = os.path.join(XML_IMPORT_DIR, filename)
         try:
-            return dateutil_parser.parse(val)
-        except Exception:
-            return None
+            with open(filepath, "r", encoding="utf-8") as f:
+                xml = f.read()
+            try:
+                root = ET.fromstring(xml)
+            except Exception as e:
+                failed.append({"file": filename, "reason": f"Invalid XML: {e}"})
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Import from PDA to SQL",
+                    action_variant="import-from-pda-to-sql",
+                    status="Error",
+                    message=f"Failed to import {filename}: Invalid XML: {str(e)}",
+                ))
+                continue
 
-    # map header fields
-    company_id = text(header_elem, 'Company_ID')
-    store_code = text(header_elem, 'StoreCode')
-    posting_date = parse_dt(text(header_elem, 'PostingDate'))
-    trans_id = text(header_elem, 'TransID')
+            # find header, customer and lines
+            header_elem = root.find('.//tTransHeader')
+            if header_elem is None:
+                raise HTTPException(status_code=400, detail="Missing tREMOTETransHeader element")
 
-    if not (company_id and store_code and posting_date and trans_id):
-        raise HTTPException(status_code=400, detail="Header missing required key fields")
+            def text(e, tag):
+                c = e.find(tag)
+                return c.text.strip() if (c is not None and c.text is not None) else None
 
-    # delete any existing rows for this key
-    await db.execute(delete(TREMOTETransSaleLines).where(
-        TREMOTETransSaleLines.Company_ID == company_id,
-        TREMOTETransSaleLines.StoreCode == store_code,
-        TREMOTETransSaleLines.PostingDate == posting_date,
-        TREMOTETransSaleLines.TransID == trans_id,
-    ))
+            def parse_dt(val):
+                if not val:
+                    return None
+                try:
+                    return dateutil_parser.parse(val)
+                except Exception:
+                    return None
 
-    await db.execute(delete(TREMOTETransSaleTenders).where(
-        TREMOTETransSaleTenders.Company_ID == company_id,
-        TREMOTETransSaleTenders.StoreCode == store_code,
-        TREMOTETransSaleTenders.PostingDate == posting_date,
-        TREMOTETransSaleTenders.TransID == trans_id,
-    ))
+            # map header fields
+            company_id = text(header_elem, 'Company_ID')
+            store_code = text(header_elem, 'StoreCode')
+            posting_date = parse_dt(text(header_elem, 'PostingDate'))
+            trans_id = text(header_elem, 'TransID')
 
-    await db.execute(delete(TREMOTETransSaleLineSerials).where(
-        TREMOTETransSaleLineSerials.Company_ID == company_id,
-        TREMOTETransSaleLineSerials.StoreCode == store_code,
-        TREMOTETransSaleLineSerials.PostingDate == posting_date,
-        TREMOTETransSaleLineSerials.TransID == trans_id,
-    ))
+            if not (company_id and store_code and posting_date and trans_id):
+                raise HTTPException(status_code=400, detail="Header missing required key fields")
+            
+            # Check if a header with these keys already exists
+            existing = await db.execute(
+                select(TREMOTETransHeader).where(
+                    TREMOTETransHeader.Company_ID == company_id,
+                    TREMOTETransHeader.StoreCode == store_code,
+                    TREMOTETransHeader.PostingDate == posting_date,
+                    TREMOTETransHeader.TransID == trans_id,
+                )
+            )
+            if existing.scalar_one_or_none() is not None:
+                skipped.append({"file": filename, "reason": f"TransID {trans_id} already exists"})
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Import from PDA to SQL",
+                    action_variant="import-from-pda-to-sql",
+                    status="Skipped",
+                    message=f"Skipped {filename}: TransID {trans_id} already exists",
+                ))
+                dest = os.path.join(XML_PROCESSED_DIR, filename)
+                shutil.move(filepath, dest)
+                continue
 
-    await db.execute(delete(TREMOTETransCustomer).where(
-        TREMOTETransCustomer.Company_ID == company_id,
-        TREMOTETransCustomer.StoreCode == store_code,
-        TREMOTETransCustomer.PostingDate == posting_date,
-        TREMOTETransCustomer.TransID == trans_id,
-    ))
+            # build header model
+            header_kwargs = {
+                'Company_ID': company_id,
+                'StoreCode': store_code,
+                'PostingDate': posting_date,
+                'TransID': trans_id,
+                'TransDate': parse_dt(text(header_elem, 'TransDate')) or posting_date,
+                'ClosedYN': text(header_elem, 'ClosedYN'),
+                'ClosedBy': text(header_elem, 'ClosedBy'),
+                'SaleType': text(header_elem, 'SaleType'),
+                'Status': text(header_elem, 'Status'),
+                'Cashier': text(header_elem, 'Cashier'),
+                'Salesperson': text(header_elem, 'Salesperson'),
+                'CustomerID': text(header_elem, 'CustomerID'),
+                'Till': text(header_elem, 'Till'),
+                'OriginalSaleType': text(header_elem, 'OriginalSaleType'),
+                'TransactionTime': parse_dt(text(header_elem, 'TransactionTime')),
+                'VoidYN': text(header_elem, 'VoidYN'),
+                'VoidedTransID': text(header_elem, 'VoidedTransID'),
+                'DeletedTransaction': text(header_elem, 'DeletedTransaction'),
+                'Period': int(text(header_elem, 'Period')) if text(header_elem, 'Period') else None,
+                'WeekNo': int(text(header_elem, 'WeekNo')) if text(header_elem, 'WeekNo') else None,
+                'WeekStartDate': parse_dt(text(header_elem, 'WeekStartDate')),
+                'OriginalTransID': text(header_elem, 'OriginalTransID'),
+                'Notes': text(header_elem, 'Notes'),
+                'Change': Decimal(text(header_elem, 'Change')) if text(header_elem, 'Change') else None,
+                'Sent2Host': text(header_elem, 'Sent2Host'),
+                'Sent2HostDateTime': parse_dt(text(header_elem, 'Sent2HostDateTime')),
+                'DueDate': parse_dt(text(header_elem, 'DueDate')),
+                'Special1': text(header_elem, 'Special1'),
+                'Special2': text(header_elem, 'Special2'),
+                'Special3': text(header_elem, 'Special3'),
+            }
 
-    await db.execute(delete(TREMOTETransHeader).where(
-        TREMOTETransHeader.Company_ID == company_id,
-        TREMOTETransHeader.StoreCode == store_code,
-        TREMOTETransHeader.PostingDate == posting_date,
-        TREMOTETransHeader.TransID == trans_id,
-    ))
+            header_obj = TREMOTETransHeader(**header_kwargs)
+            db.add(header_obj)
 
-    # build header model
-    header_kwargs = {
-        'Company_ID': company_id,
-        'StoreCode': store_code,
-        'PostingDate': posting_date,
-        'TransID': trans_id,
-        'TransDate': parse_dt(text(header_elem, 'TransDate')) or posting_date,
-        'ClosedYN': text(header_elem, 'ClosedYN'),
-        'ClosedBy': text(header_elem, 'ClosedBy'),
-        'SaleType': text(header_elem, 'SaleType'),
-        'Status': text(header_elem, 'Status'),
-        'Cashier': text(header_elem, 'Cashier'),
-        'Salesperson': text(header_elem, 'Salesperson'),
-        'CustomerID': text(header_elem, 'CustomerID'),
-        'Till': text(header_elem, 'Till'),
-        'OriginalSaleType': text(header_elem, 'OriginalSaleType'),
-        'TransactionTime': parse_dt(text(header_elem, 'TransactionTime')),
-        'VoidYN': text(header_elem, 'VoidYN'),
-        'VoidedTransID': text(header_elem, 'VoidedTransID'),
-        'DeletedTransaction': text(header_elem, 'DeletedTransaction'),
-        'Period': int(text(header_elem, 'Period')) if text(header_elem, 'Period') else None,
-        'WeekNo': int(text(header_elem, 'WeekNo')) if text(header_elem, 'WeekNo') else None,
-        'WeekStartDate': parse_dt(text(header_elem, 'WeekStartDate')),
-        'OriginalTransID': text(header_elem, 'OriginalTransID'),
-        'Notes': text(header_elem, 'Notes'),
-        'Change': Decimal(text(header_elem, 'Change')) if text(header_elem, 'Change') else None,
-        'Sent2Host': text(header_elem, 'Sent2Host'),
-        'Sent2HostDateTime': parse_dt(text(header_elem, 'Sent2HostDateTime')),
-        'DueDate': parse_dt(text(header_elem, 'DueDate')),
-        'Special1': text(header_elem, 'Special1'),
-        'Special2': text(header_elem, 'Special2'),
-        'Special3': text(header_elem, 'Special3'),
+            # customer
+            customer_elem = root.find('.//tTransCustomer')
+            if customer_elem is not None:
+                cust_kwargs = {
+                    'Company_ID': company_id,
+                    'StoreCode': store_code,
+                    'PostingDate': parse_dt(text(customer_elem, 'PostingDate')) or posting_date,
+                    'TransID': text(customer_elem, 'TransID') or trans_id,
+                    'Name': text(customer_elem, 'Name'),
+                    'Address1': text(customer_elem, 'Address1'),
+                    'Address2': text(customer_elem, 'Address2'),
+                    'Suburb': text(customer_elem, 'Suburb'),
+                    'PostCode': text(customer_elem, 'PostCode'),
+                    'FaxNo': text(customer_elem, 'FaxNo'),
+                    'PhoneNo1': text(customer_elem, 'PhoneNo1'),
+                    'PhoneNo2': text(customer_elem, 'PhoneNo2'),
+                    'EmailAddress': text(customer_elem, 'EmailAddress'),
+                    'SalesPerson': text(customer_elem, 'SalesPerson'),
+                    'ContactName1': text(customer_elem, 'ContactName1'),
+                    'DateTimeLastChanged': parse_dt(text(customer_elem, 'DateTimeLastChanged')),
+                    'AccountCode': text(customer_elem, 'AccountCode'),
+                    'ShipToName': text(customer_elem, 'ShipToName'),
+                    'ShipToAddress1': text(customer_elem, 'ShipToAddress1'),
+                    'ShipToAddress2': text(customer_elem, 'ShipToAddress2'),
+                    'ShipToSuburb': text(customer_elem, 'ShipToSuburb'),
+                    'ShipToPostCode': text(customer_elem, 'ShipToPostCode'),
+                    'Sent2Host': text(customer_elem, 'Sent2Host'),
+                    'Sent2HostDateTime': parse_dt(text(customer_elem, 'Sent2HostDateTime')),
+                }
+
+                cust_obj = TREMOTETransCustomer(**cust_kwargs)
+                db.add(cust_obj)
+
+            # sale lines (may be many)
+            for line_elem in root.findall('.//tTransSaleLines'):
+                try:
+                    sale_line_kwargs = {
+                        'Company_ID': company_id,
+                        'StoreCode': store_code,
+                        'PostingDate': parse_dt(text(line_elem, 'PostingDate')) or posting_date,
+                        'TransID': text(line_elem, 'TransID') or trans_id,
+                        'SaleLineNo': int(text(line_elem, 'SaleLineNo')) if text(line_elem, 'SaleLineNo') else None,
+                        'SKU': text(line_elem, 'SKU'),
+                        'SaleQty': Decimal(text(line_elem, 'SaleQty')) if text(line_elem, 'SaleQty') else None,
+                        'SaleUnitAmountIncTax': Decimal(text(line_elem, 'SaleUnitAmountIncTax')) if text(line_elem, 'SaleUnitAmountIncTax') else None,
+                        'SaleTaxRate': Decimal(text(line_elem, 'SaleTaxRate')) if text(line_elem, 'SaleTaxRate') else None,
+                        'SaleUnitDiscount': Decimal(text(line_elem, 'SaleUnitDiscount')) if text(line_elem, 'SaleUnitDiscount') else None,
+                        'ItemID': text(line_elem, 'ItemID'),
+                        'SalesPerson': text(line_elem, 'SalesPerson'),
+                        'SaleRRP': Decimal(text(line_elem, 'SaleRRP')) if text(line_elem, 'SaleRRP') else None,
+                        'SaleTaxUnitAmount': Decimal(text(line_elem, 'SaleTaxUnitAmount')) if text(line_elem, 'SaleTaxUnitAmount') else None,
+                        'SKUDescription': text(line_elem, 'SKUDescription'),
+                        'CurrencyCode': text(line_elem, 'CurrencyCode'),
+                        'HOSKU': text(line_elem, 'HOSKU'),
+                        'Cost': Decimal(text(line_elem, 'Cost')) if text(line_elem, 'Cost') else None,
+                        'Sent2Host': text(line_elem, 'Sent2Host'),
+                        'Sent2HostDateTime': parse_dt(text(line_elem, 'Sent2HostDateTime')),
+                    }
+
+                    sale_obj = TREMOTETransSaleLines(**sale_line_kwargs)
+                    db.add(sale_obj)
+                except Exception:
+                    # skip malformed lines but continue processing
+                    continue
+
+            # sale tenders
+            for tender_elem in root.findall('.//tTransSaleTenders'):
+                try:
+                    tender_kwargs = {
+                        'Company_ID': company_id,
+                        'StoreCode': store_code,
+                        'PostingDate': parse_dt(text(tender_elem, 'PostingDate')) or posting_date,
+                        'TransID': text(tender_elem, 'TransID') or trans_id,
+                        'TenderLine': int(text(tender_elem, 'TenderLine')) if text(tender_elem, 'TenderLine') else None,
+                        'TenderType': text(tender_elem, 'TenderType'),
+                        'TenderAmount': Decimal(text(tender_elem, 'TenderAmount')) if text(tender_elem, 'TenderAmount') else None,
+                        'TDets1': text(tender_elem, 'TDets1'),
+                        'TDets2': text(tender_elem, 'TDets2'),
+                        'CurrencyCode': text(tender_elem, 'CurrencyCode'),
+                        'ForeignTenderAmount': Decimal(text(tender_elem, 'ForeignTenderAmount')) if text(tender_elem, 'ForeignTenderAmount') else None,
+                        'Search': text(tender_elem, 'Search'),
+                        'Sent2Host': text(tender_elem, 'Sent2Host'),
+                        'Sent2HostDateTime': parse_dt(text(tender_elem, 'Sent2HostDateTime')),
+                    }
+
+                    tender_obj = TREMOTETransSaleTenders(**tender_kwargs)
+                    db.add(tender_obj)
+                except Exception:
+                    # skip malformed tenders but continue
+                    continue
+
+            await db.commit()
+            imported.append({"file": filename, "TransID": trans_id})
+            jsonl_logger.info(build_jsonl_entry(
+                action_type="Import from PDA to SQL",
+                action_variant="import-from-pda-to-sql",
+                status="Success",
+                message=f"Imported {filename} successfully.",
+            ))
+            dest = os.path.join(XML_PROCESSED_DIR, filename)
+            shutil.move(filepath, dest)
+
+        except Exception as e:
+            await db.rollback()
+            failed.append({"file": filename, "reason": str(e)})
+            jsonl_logger.info(build_jsonl_entry(
+                action_type="Import from PDA to SQL",
+                action_variant="import-from-pda-to-sql",
+                status="Error",
+                message=f"Failed to import {filename}: {str(e)}",
+            ))
+            continue
+
+    return {
+        "message": "Directory import complete",
+        "imported": imported,
+        "skipped": skipped,
+        "failed": failed,
     }
-
-    header_obj = TREMOTETransHeader(**header_kwargs)
-    db.add(header_obj)
-
-    # customer
-    customer_elem = root.find('.//tREMOTETransCustomer')
-    if customer_elem is not None:
-        cust_kwargs = {
-            'Company_ID': company_id,
-            'StoreCode': store_code,
-            'PostingDate': parse_dt(text(customer_elem, 'PostingDate')) or posting_date,
-            'TransID': text(customer_elem, 'TransID') or trans_id,
-            'Name': text(customer_elem, 'Name'),
-            'Address1': text(customer_elem, 'Address1'),
-            'Address2': text(customer_elem, 'Address2'),
-            'Suburb': text(customer_elem, 'Suburb'),
-            'PostCode': text(customer_elem, 'PostCode'),
-            'FaxNo': text(customer_elem, 'FaxNo'),
-            'PhoneNo1': text(customer_elem, 'PhoneNo1'),
-            'PhoneNo2': text(customer_elem, 'PhoneNo2'),
-            'EmailAddress': text(customer_elem, 'EmailAddress'),
-            'SalesPerson': text(customer_elem, 'SalesPerson'),
-            'ContactName1': text(customer_elem, 'ContactName1'),
-            'DateTimeLastChanged': parse_dt(text(customer_elem, 'DateTimeLastChanged')),
-            'AccountCode': text(customer_elem, 'AccountCode'),
-            'ShipToName': text(customer_elem, 'ShipToName'),
-            'ShipToAddress1': text(customer_elem, 'ShipToAddress1'),
-            'ShipToAddress2': text(customer_elem, 'ShipToAddress2'),
-            'ShipToSuburb': text(customer_elem, 'ShipToSuburb'),
-            'ShipToPostCode': text(customer_elem, 'ShipToPostCode'),
-            'Sent2Host': text(customer_elem, 'Sent2Host'),
-            'Sent2HostDateTime': parse_dt(text(customer_elem, 'Sent2HostDateTime')),
-        }
-
-        cust_obj = TREMOTETransCustomer(**cust_kwargs)
-        db.add(cust_obj)
-
-    # sale lines (may be many)
-    for line_elem in root.findall('.//tREMOTETransSaleLines'):
-        try:
-            sale_line_kwargs = {
-                'Company_ID': company_id,
-                'StoreCode': store_code,
-                'PostingDate': parse_dt(text(line_elem, 'PostingDate')) or posting_date,
-                'TransID': text(line_elem, 'TransID') or trans_id,
-                'SaleLineNo': int(text(line_elem, 'SaleLineNo')) if text(line_elem, 'SaleLineNo') else None,
-                'SKU': text(line_elem, 'SKU'),
-                'SaleQty': Decimal(text(line_elem, 'SaleQty')) if text(line_elem, 'SaleQty') else None,
-                'SaleUnitAmountIncTax': Decimal(text(line_elem, 'SaleUnitAmountIncTax')) if text(line_elem, 'SaleUnitAmountIncTax') else None,
-                'SaleTaxRate': Decimal(text(line_elem, 'SaleTaxRate')) if text(line_elem, 'SaleTaxRate') else None,
-                'SaleUnitDiscount': Decimal(text(line_elem, 'SaleUnitDiscount')) if text(line_elem, 'SaleUnitDiscount') else None,
-                'ItemID': text(line_elem, 'ItemID'),
-                'SalesPerson': text(line_elem, 'SalesPerson'),
-                'SaleRRP': Decimal(text(line_elem, 'SaleRRP')) if text(line_elem, 'SaleRRP') else None,
-                'SaleTaxUnitAmount': Decimal(text(line_elem, 'SaleTaxUnitAmount')) if text(line_elem, 'SaleTaxUnitAmount') else None,
-                'SKUDescription': text(line_elem, 'SKUDescription'),
-                'CurrencyCode': text(line_elem, 'CurrencyCode'),
-                'HOSKU': text(line_elem, 'HOSKU'),
-                'Cost': Decimal(text(line_elem, 'Cost')) if text(line_elem, 'Cost') else None,
-                'Sent2Host': text(line_elem, 'Sent2Host'),
-                'Sent2HostDateTime': parse_dt(text(line_elem, 'Sent2HostDateTime')),
-            }
-
-            sale_obj = TREMOTETransSaleLines(**sale_line_kwargs)
-            db.add(sale_obj)
-        except Exception:
-            # skip malformed lines but continue processing
-            continue
-
-    await db.commit()
-
-    # sale tenders
-    for tender_elem in root.findall('.//tREMOTETransSaleTenders'):
-        try:
-            tender_kwargs = {
-                'Company_ID': company_id,
-                'StoreCode': store_code,
-                'PostingDate': parse_dt(text(tender_elem, 'PostingDate')) or posting_date,
-                'TransID': text(tender_elem, 'TransID') or trans_id,
-                'TenderLine': int(text(tender_elem, 'TenderLine')) if text(tender_elem, 'TenderLine') else None,
-                'TenderType': text(tender_elem, 'TenderType'),
-                'TenderAmount': Decimal(text(tender_elem, 'TenderAmount')) if text(tender_elem, 'TenderAmount') else None,
-                'TDets1': text(tender_elem, 'TDets1'),
-                'TDets2': text(tender_elem, 'TDets2'),
-                'CurrencyCode': text(tender_elem, 'CurrencyCode'),
-                'ForeignTenderAmount': Decimal(text(tender_elem, 'ForeignTenderAmount')) if text(tender_elem, 'ForeignTenderAmount') else None,
-                'Search': text(tender_elem, 'Search'),
-                'Sent2Host': text(tender_elem, 'Sent2Host'),
-                'Sent2HostDateTime': parse_dt(text(tender_elem, 'Sent2HostDateTime')),
-            }
-
-            tender_obj = TREMOTETransSaleTenders(**tender_kwargs)
-            db.add(tender_obj)
-        except Exception:
-            # skip malformed tenders but continue
-            continue
-
-    await db.commit()
-
-    return {"message": "Imported", "TransID": trans_id}

@@ -4,13 +4,20 @@ Logging configuration with file rotation for FastAPI application.
 
 import logging
 import logging.handlers
-import os
+import json
+import uuid
+
+
+from datetime import datetime, timezone
 from pathlib import Path
-from datetime import datetime
 
 # Create logs directory if it doesn't exist
 LOGS_DIR = Path(__file__).parent.parent / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
+JSONL_LOGS_DIR = Path(__file__).parent.parent / "logs" / "jsonl"
+JSONL_LOGS_DIR.mkdir(exist_ok=True)
+
+TIMEZONE = timezone.utc
 
 # Log file paths
 MAIN_LOG_FILE = LOGS_DIR / "app.log"
@@ -133,3 +140,106 @@ def log_shutdown_info():
     logger.info("APPLICATION SHUTDOWN")
     logger.info(f"Timestamp: {datetime.now().isoformat()}")
     logger.info("=" * 80)
+
+
+class JsonlRotatingHandler(logging.handlers.TimedRotatingFileHandler):
+    """
+    Writes a new JSONL log file each day.
+    Files are named DD-MM-YYYY.log and stored in JSONL_LOGS_DIR.
+    """
+
+    def __init__(self):
+        # Compute today's file path on init
+        filename = self._get_filepath()
+        super().__init__(
+            filename=filename,
+            when="midnight",
+            interval=1,
+            backupCount=0,      # we manage filenames ourselves
+            encoding="utf-8",
+            delay=False,
+        )
+        self.suffix = "%d-%m-%Y.log"  # not really used but kept for clarity
+
+    def _get_filepath(self) -> str:
+        today = datetime.now(tz=TIMEZONE).strftime("%d-%m-%Y")
+        return str(JSONL_LOGS_DIR / f"{today}.log")
+
+    def rotation_filename(self, default_name: str) -> str:
+        """Override so rotated file gets today's date name, not yesterday's."""
+        return self._get_filepath()
+
+    def emit(self, record: logging.LogRecord):
+        """Write the record's msg (already a JSON string) as a JSONL line."""
+        try:
+            with open(self.baseFilename, "a", encoding="utf-8") as f:
+                f.write(record.getMessage() + "\n")
+        except Exception:
+            self.handleError(record)
+
+    def doRollover(self):
+        """On midnight rollover, just update baseFilename to the new date."""
+        self.baseFilename = self._get_filepath()
+        self.rolloverAt = self.computeRollover(self.rolloverAt)
+
+
+def get_jsonl_logger() -> logging.Logger:
+    """
+    Returns a dedicated logger that writes structured JSONL entries
+    to a daily rotating file (DD-MM-YYYY.log) in the jsonl logs directory.
+
+    Usage:
+        from logging_config import get_jsonl_logger, build_jsonl_entry
+
+        jsonl_logger = get_jsonl_logger()
+        jsonl_logger.info(build_jsonl_entry(
+            action_type="Export Unleashed",
+            action_variant="export-unleashed",
+            status="Success",
+            message="Exported 212 purchase orders to Unleashed ERP.",
+        ))
+    """
+    logger_name = "jsonl"
+    logger = logging.getLogger(logger_name)
+
+    # Avoid adding duplicate handlers if called multiple times
+    if logger.handlers:
+        return logger
+
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False  # don't bubble up to root logger
+
+    handler = JsonlRotatingHandler()
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+
+    return logger
+
+
+def build_jsonl_entry(
+    action_type: str,
+    action_variant: str,
+    status: str,
+    message: str,
+) -> str:
+    """
+    Builds a JSON string representing one log entry.
+
+    Args:
+        action_type:    Human-readable action label e.g. "Export Unleashed"
+        action_variant: Machine-readable slug e.g. "export-unleashed"
+        status:         "Success", "Failed", "Pending", etc.
+        message:        Descriptive message for this log entry
+
+    Returns:
+        A JSON string ready to be passed to the jsonl logger.
+    """
+    entry = {
+        "id": str(uuid.uuid4()),
+        "timestamp": datetime.now(tz=TIMEZONE).isoformat(),
+        "actionType": action_type,
+        "actionVariant": action_variant,
+        "status": status,
+        "message": message,
+    }
+    return json.dumps(entry)
