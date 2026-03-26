@@ -40,7 +40,7 @@ async def fetch_all_unleashed_products() -> list[dict]:
     """Paginate through all products from the Products API."""
     products = []
     page = 1
-    page_size = 200
+    page_size = 1000
 
     async with httpx.AsyncClient() as client:
         while True:
@@ -199,7 +199,7 @@ async def fetch_all_stock_on_hand() -> dict[str, dict]:
     """
     stock_map: dict[str, dict] = {}
     page = 1
-    page_size = 200
+    page_size = 1000
 
     async with httpx.AsyncClient() as client:
         while True:

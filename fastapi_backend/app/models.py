@@ -648,7 +648,7 @@ class TCustomers(Base):
     CustomerID: Mapped[int] = mapped_column(
     Integer, Identity(start=1, increment=1), primary_key=True
     )
-    CustomerCode: Mapped[str] = mapped_column(String(10, 'Latin1_General_CI_AS'), nullable=True)
+    CustomerCode: Mapped[str] = mapped_column(String(16, 'Latin1_General_CI_AS'), nullable=True)
     CardRecordID: Mapped[int] = mapped_column(Integer, nullable=False)
     CardIdentification: Mapped[str] = mapped_column(Unicode(16, 'Latin1_General_CI_AS'), nullable=False)
     Name: Mapped[str] = mapped_column(String(255, 'Latin1_General_CI_AS'), nullable=False)

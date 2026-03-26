@@ -138,7 +138,7 @@ export default function DataSyncDashboard() {
     };
 
     fetchLogs();
-    const interval = setInterval(fetchLogs, 30_000);
+    const interval = setInterval(fetchLogs, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -147,15 +147,15 @@ export default function DataSyncDashboard() {
 
   async function importFromPDAToSQL() {
     setActionLoading("import-from-pda-to-sql", true);
-    const newLog: ActivityLog = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      actionType: "Import from PDA to SQL",
-      actionVariant: "import-from-pda-to-sql",
-      status: "In Progress",
-      message: "Importing XML files from PDA into SQL...",
-    };
-    setLogs((prev) => [newLog, ...prev]);
+    // const newLog: ActivityLog = {
+    //   id: crypto.randomUUID(),
+    //   timestamp: new Date().toISOString(),
+    //   actionType: "Import from PDA to SQL",
+    //   actionVariant: "import-from-pda-to-sql",
+    //   status: "In Progress",
+    //   message: "Importing XML files from PDA into SQL...",
+    // };
+    // setLogs((prev) => [newLog, ...prev]);
 
     try {
       const response = await axios.post(
@@ -177,17 +177,17 @@ export default function DataSyncDashboard() {
           : "No XML files found in directory.";
       const hasFailures = failed.length > 0;
 
-      setLogs((prev) =>
-        prev.map((l) =>
-          l.id === newLog.id
-            ? {
-                ...l,
-                status: hasFailures ? "Error" : "Success",
-                message: `${summary}.`,
-              }
-            : l,
-        ),
-      );
+      // setLogs((prev) =>
+      //   prev.map((l) =>
+      //     l.id === newLog.id
+      //       ? {
+      //           ...l,
+      //           status: hasFailures ? "Error" : "Success",
+      //           message: `${summary}.`,
+      //         }
+      //       : l,
+      //   ),
+      // );
 
       showToast(
         hasFailures
@@ -196,17 +196,17 @@ export default function DataSyncDashboard() {
         hasFailures ? "error" : "success",
       );
     } catch {
-      setLogs((prev) =>
-        prev.map((l) =>
-          l.id === newLog.id
-            ? {
-                ...l,
-                status: "Error",
-                message: "Import failed: Could not reach the import endpoint.",
-              }
-            : l,
-        ),
-      );
+      // setLogs((prev) =>
+      //   prev.map((l) =>
+      //     l.id === newLog.id
+      //       ? {
+      //           ...l,
+      //           status: "Error",
+      //           message: "Import failed: Could not reach the import endpoint.",
+      //         }
+      //       : l,
+      //   ),
+      // );
       showToast("Import failed. Could not reach the server.", "error");
     }
     setActionLoading("import-from-pda-to-sql", false);
@@ -214,15 +214,15 @@ export default function DataSyncDashboard() {
 
   async function exportFromSQLToUnleashed() {
     setActionLoading("export-from-sql-to-unleashed", true);
-    const newLog: ActivityLog = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      actionType: "Export from SQL to Unleashed",
-      actionVariant: "export-from-sql-to-unleashed",
-      status: "In Progress",
-      message: "Exporting sales orders from SQL to Unleashed...",
-    };
-    setLogs((prev) => [newLog, ...prev]);
+    // const newLog: ActivityLog = {
+    //   id: crypto.randomUUID(),
+    //   timestamp: new Date().toISOString(),
+    //   actionType: "Export from SQL to Unleashed",
+    //   actionVariant: "export-from-sql-to-unleashed",
+    //   status: "In Progress",
+    //   message: "Exporting sales orders from SQL to Unleashed...",
+    // };
+    // setLogs((prev) => [newLog, ...prev]);
 
     try {
       await axios.post(
@@ -233,87 +233,89 @@ export default function DataSyncDashboard() {
         },
       );
 
-      setLogs((prev) =>
-        prev.map((l) =>
-          l.id === newLog.id
-            ? {
-                ...l,
-                status: "Success",
-                message: "Sales orders successfully exported to Unleashed.",
-              }
-            : l,
-        ),
-      );
+      // setLogs((prev) =>
+      //   prev.map((l) =>
+      //     l.id === newLog.id
+      //       ? {
+      //           ...l,
+      //           status: "Success",
+      //           message: "Sales orders successfully exported to Unleashed.",
+      //         }
+      //       : l,
+      //   ),
+      // );
       showToast("Sales orders exported to Unleashed successfully.", "success");
     } catch {
-      setLogs((prev) =>
-        prev.map((l) =>
-          l.id === newLog.id
-            ? {
-                ...l,
-                status: "Error",
-                message:
-                  "Export failed: Could not reach the sales orders endpoint.",
-              }
-            : l,
-        ),
-      );
+      // setLogs((prev) =>
+      //   prev.map((l) =>
+      //     l.id === newLog.id
+      //       ? {
+      //           ...l,
+      //           status: "Error",
+      //           message:
+      //             "Export failed: Could not reach the sales orders endpoint.",
+      //         }
+      //       : l,
+      //   ),
+      // );
       showToast("Export failed. Could not reach the server.", "error");
     }
     setActionLoading("export-from-sql-to-unleashed", false);
   }
 
   async function importFromUnleashedToSQL() {
+    setLoading(true);
     setActionLoading("import-from-unleashed-to-sql", true);
-    const newLog: ActivityLog = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      actionType: "Import from Unleashed to SQL",
-      actionVariant: "import-from-unleashed-to-sql",
-      status: "In Progress",
-      message: "Importing customers and products from Unleashed...",
-    };
-    setLogs((prev) => [newLog, ...prev]);
+    // const newLog: ActivityLog = {
+    //   id: crypto.randomUUID(),
+    //   timestamp: new Date().toISOString(),
+    //   actionType: "Import from Unleashed to SQL",
+    //   actionVariant: "import-from-unleashed-to-sql",
+    //   status: "In Progress",
+    //   message: "Importing customers and products from Unleashed...",
+    // };
+    // setLogs((prev) => [newLog, ...prev]);
 
     try {
-      await axios.post(
-        "http://localhost:8000/customers/import-customers-from-unleashed",
-        null,
-        { headers: { accept: "application/json" } },
-      );
+      // await axios.post(
+      //   "http://localhost:8000/customers/import-customers-from-unleashed",
+      //   null,
+      //   { headers: { accept: "application/json" } },
+      // );
 
       await axios.post("http://localhost:8000/products/import-products", null, {
         headers: { accept: "application/json" },
       });
 
-      setLogs((prev) =>
-        prev.map((l) =>
-          l.id === newLog.id
-            ? {
-                ...l,
-                status: "Success",
-                message:
-                  "Customers and products successfully imported from Unleashed.",
-              }
-            : l,
-        ),
-      );
+      // setLogs((prev) =>
+      //   prev.map((l) =>
+      //     l.id === newLog.id
+      //       ? {
+      //           ...l,
+      //           status: "Success",
+      //           message:
+      //             "Customers and products successfully imported from Unleashed.",
+      //         }
+      //       : l,
+      //   ),
+      // );
       showToast("Customers and products imported successfully.", "success");
     } catch {
-      setLogs((prev) =>
-        prev.map((l) =>
-          l.id === newLog.id
-            ? {
-                ...l,
-                status: "Error",
-                message:
-                  "Import failed: Could not reach one or more Unleashed endpoints.",
-              }
-            : l,
-        ),
-      );
+      // setLogs((prev) =>
+      //   prev.map((l) =>
+      //     l.id === newLog.id
+      //       ? {
+      //           ...l,
+      //           status: "Error",
+      //           message:
+      //             "Import failed: Could not reach one or more Unleashed endpoints.",
+      //         }
+      //       : l,
+      //   ),
+      // );
       showToast("Import failed. Could not reach the server.", "error");
     } finally {
+      setLoading(false);
       setActionLoading("import-from-unleashed-to-sql", false);
     }
   }
@@ -426,19 +428,23 @@ export default function DataSyncDashboard() {
             </div>
 
             <div className="flex justify-center">
-              <button
-                onClick={() => importFromUnleashedToSQL()}
-                disabled={loadingActions.has("import-from-unleashed-to-sql")}
-                className={`w-[calc(50%-6px)] rounded-xl py-9 flex flex-col items-center gap-2 font-semibold transition-all
-                  ${
-                    loadingActions.has("import-from-unleashed-to-sql")
-                      ? "bg-gray-600 text-gray-300 cursor-not-allowed opacity-60"
-                      : "bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.97] cursor-pointer"
-                  }`}
-              >
-                <CloudArrowDownIcon className="w-7 h-7" />
-                <span className="text-sm">Import from Unleashed to SQL</span>
-              </button>
+              <div className="relative w-[calc(50%-6px)] rounded-xl">
+                {loading && <Loader text="" />}
+
+                <button
+                  onClick={() => importFromUnleashedToSQL()}
+                  disabled={loadingActions.has("import-from-unleashed-to-sql")}
+                  className={`w-full rounded-xl py-9 flex flex-col items-center gap-2 font-semibold transition-all
+                    ${
+                      loadingActions.has("import-from-unleashed-to-sql")
+                        ? "bg-gray-600 text-gray-300 cursor-not-allowed opacity-60"
+                        : "bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.97] cursor-pointer"
+                    }`}
+                >
+                  <CloudArrowDownIcon className="w-7 h-7" />
+                  <span className="text-sm">Import from Unleashed to SQL</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
