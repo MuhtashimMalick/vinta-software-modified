@@ -76,38 +76,38 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
             await db.flush()  
             next_id += 1
             inserted += 1
-        else:
-            existing_row = existing_map[guid]
-            db_modified = existing_row.DateLastModified
-            unleashed_modified = mapped["DateLastModified"]
+        # else:
+        #     existing_row = existing_map[guid]
+        #     db_modified = existing_row.DateLastModified
+        #     unleashed_modified = mapped["DateLastModified"]
  
-            if (
-                unleashed_modified
-                and db_modified
-                and unleashed_modified <= db_modified
-            ):
-                skipped += 1
-                continue
+        #     if (
+        #         unleashed_modified
+        #         and db_modified
+        #         and unleashed_modified == db_modified
+        #     ):
+        #         skipped += 1
+        #         continue
  
-            await db.execute(
-                TItems.__table__.update()
-                .where(TItems.ItemID == existing_row.ItemID)
-                .values(**{k: v for k, v in mapped.items() if k != "UnleashedGUID"})
-            )
-            updated += 1
+        #     await db.execute(
+        #         TItems.__table__.update()
+        #         .where(TItems.ItemID == existing_row.ItemID)
+        #         .values(**{k: v for k, v in mapped.items() if k != "UnleashedGUID"})
+        #     )
+        #     updated += 1
  
     await db.commit()
     jsonl_logger.info(build_jsonl_entry(
         action_type="Import from Unleashed to SQL",
         action_variant="import-from-unleashed-to-sql",
         status="Success",
-        message=f"{inserted} products inserted, {updated} products updated, {skipped} products skipped",
+        message=f"Successfully inserted {inserted} products.",
     ))
     return {
         "status": "success",
         "total_from_api": len(products),
         "stock_records_fetched": len(stock_map),
         "inserted": inserted,
-        "updated": updated,
-        "skipped": skipped,
+        # "updated": updated,
+        # "skipped": skipped,
     }

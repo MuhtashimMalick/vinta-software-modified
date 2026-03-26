@@ -97,19 +97,20 @@ def compute_invoice_metrics(invoices):
 def fetch_customers_from_unleashed():
     all_customers = []
     page_number = 1  # Unleashed pages start at 1
-    page_size = 200
+    page_size = 1000
 
     try:
         while True:
-            query_string = f"pageNumber={page_number}&pageSize={page_size}"
-            url_with_page = f"{settings.BASE_URL}/Customers"
+            logger.info(f"Current PageNumber: {page_number}")
+            query_string = f"PageSize={page_size}"
+            url_with_page = f"{settings.BASE_URL}/Customers/{page_number}"
 
             response = requests.get(
                 url_with_page,
                 headers=get_headers(query_string=query_string),
                 params={
-                    "pageNumber": page_number,
-                    "pageSize": page_size,
+                    # "pageNumber": page_number,
+                    "PageSize": page_size,
                 }
             )
 
@@ -121,6 +122,8 @@ def fetch_customers_from_unleashed():
 
             if "Items" not in data or not data["Items"]:
                 break
+
+            logger.info(f"Starting 5 customers on page_number: {page_number}: {[item['CustomerCode'] for item in data['Items'][:5]]}")
 
             all_customers.extend(data["Items"])
 
@@ -145,18 +148,17 @@ def fetch_invoices_from_unleashed():
     """Fetch all invoices from Unleashed API with pagination"""
     all_invoices = []
     page_number = 1
-    page_size = 200
+    page_size = 1000
 
     try:
         while True:
-            query_string = f"pageNumber={page_number}&pageSize={page_size}"
-            invoices_url = f"{settings.BASE_URL}/Invoices"
+            query_string = f"pageSize={page_size}"
+            invoices_url = f"{settings.BASE_URL}/Invoices/{page_number}"
 
             response = requests.get(
                 invoices_url,
                 headers=get_headers(query_string=query_string),
                 params={
-                    "pageNumber": page_number,
                     "pageSize": page_size,
                 }
             )
@@ -230,16 +232,16 @@ def map_unleashed_to_tcustomer(unleashed_customer, metrics=None):
         FirstName=safe(unleashed_customer.get("CustomerName", "").split()[0] if unleashed_customer.get("CustomerName") else ""),
         IsIndividual="N",  # Default to non-individual
         IsInactive="N",
-        Notes=safe(unleashed_customer.get("Comments", "")),
+        Notes=safe(unleashed_customer.get("Comments", "").strip()),
         IdentifierID=safe(unleashed_customer.get("Guid", "")),
-        CustomField1="",
+        CustomField1=safe(unleashed_customer.get("CustomerName", "")),
 
-        CustomField2="",
+        CustomField2=unleashed_customer.get("DeliveryMethod"),
 
-        CustomField3="",
+        CustomField3=unleashed_customer.get("SalesOrderGroup"),
 
         TermsID=0,
-        ABN=safe(unleashed_customer.get("ABN", "")),
+        ABN=safe(unleashed_customer.get("ABN", "").strip()),
         ABNBranch="",
 
         PriceLevelID="",
@@ -346,6 +348,12 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
     Includes invoice metrics (balance, payment info, etc.)
     Returns summary of imported customers.
     """
+    jsonl_logger.info(build_jsonl_entry(
+        action_type="Import from Unleashed to SQL",
+        action_variant="import-from-unleashed-to-sql",
+        status="In Progress",
+        message="Importing customers and products from Unleashed...",
+    ))
     try:
         logger.info("Starting import of customers from Unleashed...")
         
@@ -383,7 +391,7 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
         # Fetch all existing customer codes in ONE query
         logger.info("Fetching existing customer codes from database...")
         existing_codes_result = await session.execute(
-            select(TCustomers.CustomerCode)
+            select(TCustomers.CardIdentification)
         )
         existing_codes = set(existing_codes_result.scalars().all())
         logger.info(f"Found {len(existing_codes)} existing customer codes in database")
