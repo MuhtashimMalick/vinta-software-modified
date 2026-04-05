@@ -236,9 +236,9 @@ def map_unleashed_to_tcustomer(unleashed_customer, metrics=None):
         IdentifierID=safe(unleashed_customer.get("Guid", "")),
         CustomField1=safe(unleashed_customer.get("CustomerName", "")),
 
-        CustomField2=unleashed_customer.get("DeliveryMethod"),
+        CustomField2=safe(unleashed_customer.get("DeliveryMethod","")),
 
-        CustomField3=unleashed_customer.get("SalesOrderGroup"),
+        CustomField3=safe(unleashed_customer.get("SalesOrderGroup","")),
 
         TermsID=0,
         ABN=safe(unleashed_customer.get("ABN", "").strip()),
@@ -340,16 +340,19 @@ def map_unleashed_to_tcustomer(unleashed_customer, metrics=None):
 
 
 
-# FastAPI Endpoint: Import all customers from Unleashed to SQL database
+# FastAPI Endpoint: Sync customers from Unleashed to SQL database
 @router.post("/import-customers-from-unleashed")
 async def import_customers_from_unleashed(session: AsyncSession = Depends(get_async_session)):
     """
-    Fetch all customers from Unleashed API and store them in TCustomers table.
+    Sync all customers from Unleashed API with database:
+    - Import new customers
+    - Update existing customers if changed
+    - Delete customers no longer present in Unleashed
     Includes invoice metrics (balance, payment info, etc.)
-    Returns summary of imported customers.
+    Returns summary of imported, updated, and deleted customers.
     """
     try:
-        logger.info("Starting import of customers from Unleashed...")
+        logger.info("Starting sync of customers from Unleashed...")
         
         # Fetch all customers from Unleashed
         unleashed_customers = fetch_customers_from_unleashed()
@@ -359,7 +362,9 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
             return {
                 "status": "success",
                 "message": "No customers found in Unleashed API",
-                "imported_count": 0
+                "imported_count": 0,
+                "updated_count": 0,
+                "deleted_count": 0
             }
         
         logger.info(f"Found {len(unleashed_customers)} customers in Unleashed")
@@ -382,34 +387,26 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
         
         logger.info(f"Grouped {len(unleashed_invoices)} invoices across {len(invoice_map)} customers")
         
-        # Fetch all existing customer codes in ONE query
-        logger.info("Fetching existing customer codes from database...")
-        existing_codes_result = await session.execute(
-            select(TCustomers.CardIdentification)
-        )
-        existing_codes = set(existing_codes_result.scalars().all())
-        logger.info(f"Found {len(existing_codes)} existing customer codes in database")
+        # Fetch all existing customers from database
+        logger.info("Fetching existing customers from database...")
+        existing_customers_result = await session.execute(select(TCustomers))
+        existing_customers = existing_customers_result.scalars().all()
+        logger.info(f"Found {len(existing_customers)} existing customers in database")
+        
+        # Create maps for quick lookup using CardIdentification
+        existing_by_identification = {cust.CardIdentification: cust for cust in existing_customers}
+        unleashed_codes = {cust.get("CustomerCode") for cust in unleashed_customers}
         
         imported_count = 0
+        updated_count = 0
         failed_count = 0
-        already_present_count = 0
+        deleted_count = 0
         errors = []
-        already_present = []
         
+        # Process each Unleashed customer
         for unleashed_customer in unleashed_customers:
             try:
                 customer_code = unleashed_customer.get("CustomerCode")
-                
-                # Check if customer already exists by checking the set (O(1) lookup)
-                if customer_code in existing_codes:
-                    already_present_count += 1
-                    already_present.append({
-                        "CustomerCode": customer_code,
-                        "CustomerName": unleashed_customer.get("CustomerName", ""),
-                        "Message": f"Customer with code {customer_code} already exists in database"
-                    })
-                    logger.info(f"Customer {customer_code} already exists in database, skipping...")
-                    continue
                 
                 # Get invoices for this customer
                 customer_invoices = invoice_map.get(customer_code, [])
@@ -419,59 +416,114 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
                 logger.info(f"Computed metrics for customer {customer_code}: {len(customer_invoices)} invoices, balance: {metrics['CurrentBalance']}")
                 
                 # Map Unleashed customer to TCustomers model with metrics
-                customer = map_unleashed_to_tcustomer(unleashed_customer, metrics)
+                new_customer = map_unleashed_to_tcustomer(unleashed_customer, metrics)
                 
-                # Add to session
-                session.add(customer)
-                imported_count += 1
-                
-                logger.info(f"Prepared customer {customer.CardIdentification} for import")
+                if customer_code in existing_by_identification:
+                    # Customer exists - check if update is needed
+                    existing_customer = existing_by_identification[customer_code]
+                    
+                    # Compare all relevant fields from mapping
+                    fields_to_compare = [
+                        'CustomerCode', 'CardIdentification', 'Name', 'LastName', 'FirstName',
+                        'IsIndividual', 'IsInactive', 'Notes', 'IdentifierID', 'CustomField1',
+                        'CustomField2', 'CustomField3', 'ABN', 'ABNBranch', 'PriceLevelID',
+                        'TaxIDNumber', 'UseCustomerTaxCode', 'CreditLimit', 'VolumeDiscount',
+                        'CurrentBalance', 'TotalDeposits', 'TotalReceivableDays', 'TotalPaidInvoices',
+                        'HighestInvoiceAmount', 'HighestReceivableAmount', 'PaymentCardNumber',
+                        'PaymentNameOnCard', 'PaymentBankAccountName', 'PaymentNotes', 'HourlyBillingRate',
+                        'SaleLayoutID', 'PrintedForm', 'Identifiers', 'CustomerSince', 'LastSaleDate',
+                        'LastPaymentDate', 'MethodOfPaymentID', 'PaymentExpirationDate', 'PaymentBSB',
+                        'PaymentBankAccountNumber', 'IncomeAccountID', 'SalespersonID', 'SaleCommentID',
+                        'ShippingMethodID', 'GSTIDNumber', 'ReceiptMemo', 'PaymentBankBranch',
+                        'PaymentAddress', 'PaymentZIP', 'PaymentCardVerification', 'ACCNO', 'ONHOLD'
+                    ]
+                    
+                    changed = False
+                    for attr in fields_to_compare:
+                        if getattr(existing_customer, attr, None) != getattr(new_customer, attr, None):
+                            changed = True
+                            logger.debug(f"Customer {customer_code} field {attr} changed: {getattr(existing_customer, attr, None)} -> {getattr(new_customer, attr, None)}")
+                            break
+                    
+                    if changed:
+                        # Update existing customer with new data
+                        for attr in fields_to_compare + ['ChangeControl']:
+                            setattr(existing_customer, attr, getattr(new_customer, attr, None))
+                        
+                        updated_count += 1
+                        logger.info(f"Updated customer {customer_code}")
+                    else:
+                        logger.info(f"Customer {customer_code} unchanged, no update needed")
+                else:
+                    # Customer doesn't exist - insert new
+                    session.add(new_customer)
+                    imported_count += 1
+                    logger.info(f"Prepared new customer {customer_code} for import")
                 
             except Exception as e:
                 failed_count += 1
-                error_msg = f"Error importing customer {unleashed_customer.get('CustomerCode', 'Unknown')}: {str(e)}"
+                error_msg = f"Error processing customer {unleashed_customer.get('CustomerCode', 'Unknown')}: {str(e)}"
                 jsonl_logger.info(build_jsonl_entry(
-                    action_type="Import from Unleashed to SQL",
-                    action_variant="import-from-unleashed-to-sql",
+                    action_type="Sync Customers from Unleashed to SQL",
+                    action_variant="sync-customers-from-unleashed",
                     status="Error",
                     message=error_msg,
                 ))
                 logger.error(error_msg)
                 errors.append(error_msg)
         
+        # Delete customers that are in database but not in Unleashed
+        logger.info("Checking for deleted customers...")
+        for existing_customer in existing_customers:
+            if existing_customer.CardIdentification not in unleashed_codes:
+                try:
+                    session.delete(existing_customer)
+                    deleted_count += 1
+                    logger.info(f"Marked for deletion: customer {existing_customer.CardIdentification} (no longer in Unleashed)")
+                except Exception as e:
+                    error_msg = f"Error deleting customer {existing_customer.CardIdentification}: {str(e)}"
+                    jsonl_logger.info(build_jsonl_entry(
+                        action_type="Sync Customers from Unleashed to SQL",
+                        action_variant="sync-customers-from-unleashed",
+                        status="Error",
+                        message=error_msg,
+                    ))
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+        
         # Commit all changes to database
         await session.commit()
         
-        logger.info(f"Successfully imported {imported_count} customers to SQL database")
+        logger.info(f"Sync complete - Imported: {imported_count}, Updated: {updated_count}, Deleted: {deleted_count}, Failed: {failed_count}")
         jsonl_logger.info(build_jsonl_entry(
-            action_type="Import from Unleashed to SQL",
-            action_variant="import-from-unleashed-to-sql",
+            action_type="Sync Customers from Unleashed to SQL",
+            action_variant="sync-customers-from-unleashed",
             status="Success",
-            message=f"Successfully imported {imported_count} customers to SQL database with {failed_count} failures and {already_present_count} already present.",
+            message=f"Sync completed: {imported_count} imported, {updated_count} updated, {deleted_count} deleted, {failed_count} failed.",
         ))
         
         return {
             "status": "success",
-            "message": f"Successfully imported {imported_count} out of {len(unleashed_customers)} customers with metrics",
+            "message": f"Sync completed: {imported_count} new, {updated_count} updated, {deleted_count} deleted",
             "imported_count": imported_count,
+            "updated_count": updated_count,
+            "deleted_count": deleted_count,
             "failed_count": failed_count,
-            "already_present_count": already_present_count,
-            "already_present": already_present,
             "invoices_processed": len(unleashed_invoices),
             "errors": errors if errors else []
         }
         
     except Exception as e:
         jsonl_logger.info(build_jsonl_entry(
-            action_type="Import from Unleashed to SQL",
-            action_variant="import-from-unleashed-to-sql",
+            action_type="Sync Customers from Unleashed to SQL",
+            action_variant="sync-customers-from-unleashed",
             status="Error",
-            message=f"Error importing customers: {str(e)}",
+            message=f"Error syncing customers: {str(e)}",
         ))
-        logger.error(f"Error importing customers: {str(e)}")
+        logger.error(f"Error syncing customers: {str(e)}")
         await session.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Error importing customers: {str(e)}"
+            detail=f"Error syncing customers: {str(e)}"
         )
 
