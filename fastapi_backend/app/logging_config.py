@@ -2,9 +2,10 @@
 Logging configuration with file rotation for FastAPI application.
 """
 
+import json
 import logging
 import logging.handlers
-import json
+import time
 import uuid
 
 
@@ -170,17 +171,22 @@ class JsonlRotatingHandler(logging.handlers.TimedRotatingFileHandler):
         return self._get_filepath()
 
     def emit(self, record: logging.LogRecord):
-        """Write the record's msg (already a JSON string) as a JSONL line."""
+        """Check for rollover, then write the record as a JSONL line."""
         try:
+            # ✅ Trigger date rollover if midnight has passed
+            if self.shouldRollover(record):
+                self.doRollover()
+
             with open(self.baseFilename, "a", encoding="utf-8") as f:
                 f.write(record.getMessage() + "\n")
         except Exception:
             self.handleError(record)
 
     def doRollover(self):
-        """On midnight rollover, just update baseFilename to the new date."""
+        """On midnight rollover, update baseFilename and schedule the next one."""
         self.baseFilename = self._get_filepath()
-        self.rolloverAt = self.computeRollover(self.rolloverAt)
+        # ✅ Compute next rollover from NOW, not from the stale self.rolloverAt
+        self.rolloverAt = self.computeRollover(int(time.time()))
 
 
 def get_jsonl_logger() -> logging.Logger:
