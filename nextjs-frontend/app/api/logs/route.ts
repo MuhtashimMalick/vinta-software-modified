@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
-const JSONL_LOGS_DIR = "C:\\Users\\FATTANI COMPUTERS\\Documents\\segwayz\\nextjs-fastapi-template\\fastapi_backend\\logs\\jsonl"; // same path as in logging_config.py
+const JSONL_LOGS_DIR = "C:\\Users\\Administrator\\Documents\\vinta-software-modified\\fastapi_backend\\logs\\jsonl"; // same path as in logging_config.py
 
 export async function GET() {
   try {

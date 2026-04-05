@@ -348,12 +348,6 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
     Includes invoice metrics (balance, payment info, etc.)
     Returns summary of imported customers.
     """
-    jsonl_logger.info(build_jsonl_entry(
-        action_type="Import from Unleashed to SQL",
-        action_variant="import-from-unleashed-to-sql",
-        status="In Progress",
-        message="Importing customers and products from Unleashed...",
-    ))
     try:
         logger.info("Starting import of customers from Unleashed...")
         

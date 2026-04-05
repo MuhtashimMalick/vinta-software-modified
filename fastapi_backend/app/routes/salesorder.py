@@ -136,19 +136,13 @@ router = APIRouter()
 # }
 @router.post("/export-sales-orders")
 async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
-    jsonl_logger.info(build_jsonl_entry(
-        action_type="Export from SQL to Unleashed",
-        action_variant="export-from-sql-to-unleashed",
-        status="In Progress",
-        message="Exporting sales orders from SQL to Unleashed...",
-    ))
     try:
         # Find one unsent header (Sent2Host is NULL or != 'Y')
         result = await db.execute(
             select(TREMOTETransHeader).where(
                 (TREMOTETransHeader.Sent2Host == None) 
                 | (TREMOTETransHeader.Sent2Host != 'Y')
-            ).limit(1)
+            )
         )
 
         headers = result.scalars().all()
@@ -301,14 +295,13 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                     "TaxRate": 0.1 # round(tax_rate, 6) if tax_rate is not None else (round(float(lines[0].SaleTaxRate) / 100.0, 6) if getattr(lines[0], 'SaleTaxRate', None) is not None else 0.0)
                 },
                 # "DeliveryContact": cust.PhoneNo1,
-                "SalesOrderGroup": cust.CustomField3,
-                "DeliveryMethod": cust.CustomField2,
+                "SalesOrderGroup": tcust.CustomField3,
+                "DeliveryMethod": tcust.CustomField2,
                 "DeliveryName": cust.ShipToName,
                 "DeliveryStreetAddress":cust.Address1,                                    #cust.ShipToAddress1,
                 "DeliveryStreetAddress2":cust.Address2,                                   #cust.ShipToAddress2,
                 "DeliverySuburb": cust.Suburb,
                 "DeliveryPostCode": str(cust.PostCode).strip(),
-                "DeliveryMethod":shipping_method,
                 # "TaxRate": 0.1,#round(tax_rate, 6) if tax_rate is not None else (round(float(lines[0].SaleTaxRate) / 100.0, 6) if getattr(lines[0], 'SaleTaxRate', None) is not None else 0.0),
                 "SubTotal": round(sub_total, 3),
                 "TaxTotal": round(tax_total, 3),
@@ -376,12 +369,6 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
 async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
     # XML_IMPORT_DIR = "/app/xml_input_dir"
     # XML_PROCESSED_DIR = "/app/app/xml_processed_dir"
-    jsonl_logger.info(build_jsonl_entry(
-        action_type="Import from PDA to SQL",
-        action_variant="import-from-pda-to-sql",
-        status="In Progress",
-        message="Importing XML files from PDA into SQL...",
-    ))
     XML_IMPORT_DIR = r"C:\xml_input"  
     XML_PROCESSED_DIR = r"C:\xml_processed"
     if not os.path.isdir(XML_IMPORT_DIR):
