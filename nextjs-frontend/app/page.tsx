@@ -277,11 +277,11 @@ export default function DataSyncDashboard() {
     // setLogs((prev) => [newLog, ...prev]);
 
     try {
-      // await axios.post(
-      //   "http://localhost:8000/customers/import-customers-from-unleashed",
-      //   null,
-      //   { headers: { accept: "application/json" } },
-      // );
+      await axios.post(
+        "http://localhost:8000/customers/import-customers-from-unleashed",
+        null,
+        { headers: { accept: "application/json" } },
+      );
 
       await axios.post("http://localhost:8000/products/import-products", null, {
         headers: { accept: "application/json" },
