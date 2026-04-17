@@ -1,4 +1,4 @@
-"""
+﻿"""
 Logging configuration with file rotation for FastAPI application.
 """
 
@@ -143,50 +143,30 @@ def log_shutdown_info():
     logger.info("=" * 80)
 
 
-class JsonlRotatingHandler(logging.handlers.TimedRotatingFileHandler):
-    """
-    Writes a new JSONL log file each day.
-    Files are named DD-MM-YYYY.log and stored in JSONL_LOGS_DIR.
-    """
-
+class JsonlRotatingHandler(logging.Handler):
     def __init__(self):
-        # Compute today's file path on init
-        filename = self._get_filepath()
-        super().__init__(
-            filename=filename,
-            when="midnight",
-            interval=1,
-            backupCount=0,      # we manage filenames ourselves
-            encoding="utf-8",
-            delay=False,
-        )
-        self.suffix = "%d-%m-%Y.log"  # not really used but kept for clarity
+        super().__init__()
+        self._current_date = self._get_date()
+        self._filepath = self._get_filepath()
+
+    def _get_date(self) -> str:
+        return datetime.now(tz=TIMEZONE).strftime("%d-%m-%Y")
 
     def _get_filepath(self) -> str:
-        today = datetime.now(tz=TIMEZONE).strftime("%d-%m-%Y")
-        return str(JSONL_LOGS_DIR / f"{today}.log")
-
-    def rotation_filename(self, default_name: str) -> str:
-        """Override so rotated file gets today's date name, not yesterday's."""
-        return self._get_filepath()
+        return str(JSONL_LOGS_DIR / f"{self._get_date()}.log")
 
     def emit(self, record: logging.LogRecord):
-        """Check for rollover, then write the record as a JSONL line."""
         try:
-            # ✅ Trigger date rollover if midnight has passed
-            if self.shouldRollover(record):
-                self.doRollover()
+            today = self._get_date()
+            if today != self._current_date:
+                # Date changed — update path, no rollover machinery needed
+                self._current_date = today
+                self._filepath = self._get_filepath()
 
-            with open(self.baseFilename, "a", encoding="utf-8") as f:
+            with open(self._filepath, "a", encoding="utf-8") as f:
                 f.write(record.getMessage() + "\n")
         except Exception:
             self.handleError(record)
-
-    def doRollover(self):
-        """On midnight rollover, update baseFilename and schedule the next one."""
-        self.baseFilename = self._get_filepath()
-        # ✅ Compute next rollover from NOW, not from the stale self.rolloverAt
-        self.rolloverAt = self.computeRollover(int(time.time()))
 
 
 def get_jsonl_logger() -> logging.Logger:

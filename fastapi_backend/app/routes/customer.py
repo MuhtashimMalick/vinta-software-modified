@@ -1,4 +1,4 @@
-# app/routers/unleashed.py
+﻿# app/routers/unleashed.py
 
 import datetime
 import logging
@@ -477,7 +477,7 @@ async def import_customers_from_unleashed(session: AsyncSession = Depends(get_as
         for existing_customer in existing_customers:
             if existing_customer.CardIdentification not in unleashed_codes:
                 try:
-                    session.delete(existing_customer)
+                    await session.delete(existing_customer)
                     deleted_count += 1
                     logger.info(f"Marked for deletion: customer {existing_customer.CardIdentification} (no longer in Unleashed)")
                 except Exception as e:

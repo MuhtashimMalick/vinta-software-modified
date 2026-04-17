@@ -1,0 +1,25 @@
+# Main dependencies
+fastapi[standard]==0.115.0
+asyncpg==0.29.0
+fastapi-users[sqlalchemy]==13.0.0
+pydantic-settings==2.5.2
+fastapi-mail==1.4.1
+fastapi-pagination==0.13.3
+aioodbc==0.5.0
+sqlmodel==0.0.32
+ 
+# Dev dependencies
+pre-commit==3.4.0
+ruff==0.1.0
+watchdog==5.0.3
+python-dotenv==1.0.1
+pytest==8.3.3
+pytest-mock==3.14.0
+mypy==1.13.0
+coveralls==4.0.1
+alembic==1.14.0
+pytest-asyncio==0.24.0
+mkdocs-material==9.6.9
+mkdocs-material[imaging]==9.6.9
+anyio
+click
