@@ -49,13 +49,12 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
 
     # -- Step 3: load existing products from DB in one query --
     existing_rows = (await db.execute(
-        select(TItems.UnleashedGUID, TItems.ItemID, TItems.DateLastModified)
-        .where(TItems.UnleashedGUID.isnot(None))
+        select(TItems.ItemNumber, TItems.ItemID, TItems.DateLastModified)
     )).all()
-    existing_map = {row.UnleashedGUID: row for row in existing_rows}
+    existing_map = {row.ItemNumber: row for row in existing_rows}
 
-    # Create set of current Unleashed GUIDs for deletion check
-    unleashed_guids = {p.get("Guid") for p in products if p.get("Guid")}
+    # Create set of current Unleashed ProductCodes for deletion check
+    unleashed_product_codes = {p.get("ProductCode") for p in products if p.get("ProductCode")}
 
     inserted = updated = skipped = deleted = 0
     errors = []
@@ -67,16 +66,15 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
     # Process each product from Unleashed
     for product in products:
         try:
-            guid = product.get("Guid")
-            if not guid:
+            product_code = product.get("ProductCode")
+            if not product_code:
                 skipped += 1
                 continue
      
-            product_code = product.get("ProductCode")
             stock = stock_map.get(product_code)
             mapped = map_item(product, stock)
      
-            if guid not in existing_map:
+            if product_code not in existing_map:
                 # INSERT new product
                 mapped["ItemID"] = next_id
                 logger.info(f"Inserting ItemID={next_id} for {product_code}")
@@ -86,7 +84,7 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
                 inserted += 1
             else:
                 # UPDATE if changed
-                existing_row = existing_map[guid]
+                existing_row = existing_map[product_code]
                 db_modified = existing_row.DateLastModified
                 unleashed_modified = mapped.get("DateLastModified")
                 unleashed_modified = unleashed_modified.replace(microsecond=0)
@@ -124,15 +122,15 @@ async def sync_unleashed_products(db: AsyncSession = Depends(get_async_session))
     
     # DELETE products that are in DB but not in Unleashed
     logger.info("Checking for deleted products...")
-    for guid, existing_row in existing_map.items():
-        if guid not in unleashed_guids:
+    for item_number, existing_row in existing_map.items():
+        if item_number not in unleashed_product_codes:
             try:
                 await db.execute(
                     TItems.__table__.delete()
                     .where(TItems.ItemID == existing_row.ItemID)
                 )
                 deleted += 1
-                logger.info(f"Deleted ItemID={existing_row.ItemID} with GUID={guid} (no longer in Unleashed)")
+                logger.info(f"Deleted ItemID={existing_row.ItemID} with ItemNumber={item_number} (no longer in Unleashed)")
             except Exception as e:
                 error_msg = f"Error deleting product ItemID={existing_row.ItemID}: {str(e)}"
                 logger.error(error_msg)
