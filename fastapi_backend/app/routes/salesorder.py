@@ -483,6 +483,7 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
                 'Special1': text(header_elem, 'Special1'),
                 'Special2': text(header_elem, 'Special2'),
                 'Special3': text(header_elem, 'Special3'),
+                'segwayz_internal': True,
             }
 
             header_obj = TREMOTETransHeader(**header_kwargs)

@@ -3527,6 +3527,7 @@ class TREMOTETransHeader(Base):
     Special1: Mapped[Optional[str]] = mapped_column(NCHAR(30, 'Latin1_General_CI_AS'))
     Special2: Mapped[Optional[str]] = mapped_column(NCHAR(30, 'Latin1_General_CI_AS'))
     Special3: Mapped[Optional[str]] = mapped_column(NCHAR(30, 'Latin1_General_CI_AS'))
+    segwayz_internal: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('(0)'))
 
 
 class TREMOTETransSaleLineSerials(Base):
