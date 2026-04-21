@@ -200,6 +200,32 @@ def get_shipping_address(unleashed_customer):
 
     return addresses[0] if addresses else {}
 
+# def map_price_level(sell_price_tier):
+#     mapping = {
+#         "Sell Price Tier 1": "PLA",
+#         "Sell Price Tier 2": "PLB",
+#         "Sell Price Tier 3": "PLC",
+#         "Sell Price Tier 4": "PLD",
+#         "Sell Price Tier 5": "PLE",
+#         "Sell Price Tier 6": "PLF",
+#     }
+#     return mapping.get(sell_price_tier, "BSP")
+def map_price_level(sell_price_tier):
+    if not sell_price_tier:
+        return "BSP"
+
+    normalized = sell_price_tier.strip().lower()
+
+    mapping = {
+        "sell price tier 1": "PLA",
+        "sell price tier 2": "PLB",
+        "sell price tier 3": "PLC",
+        "sell price tier 4": "PLD",
+        "sell price tier 5": "PLE",
+        "sell price tier 6": "PLF",
+    }
+
+    return mapping.get(normalized, "BSP")
 def map_unleashed_to_tcustomer(unleashed_customer, metrics=None):
     """
     Map Unleashed customer data to TCustomers model
@@ -244,8 +270,8 @@ def map_unleashed_to_tcustomer(unleashed_customer, metrics=None):
         ABN=safe(unleashed_customer.get("ABN", "").strip()),
         ABNBranch="",
 
-        PriceLevelID="",
-
+        # PriceLevelID="",
+        PriceLevelID=map_price_level(unleashed_customer.get("SellPriceTier")),
         TaxIDNumber=safe(unleashed_customer.get("GSTVATNumber"))[:19],
 
         TaxCodeID=0,
