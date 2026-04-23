@@ -208,6 +208,19 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                     tcust_res = await db.execute(select(TCustomers).where(TCustomers.CustomerID == header.CustomerID).limit(1))
                     tcust = tcust_res.scalars().first()
                     logger.debug(f"Retrieved TCustomer record: {tcust}")
+                    
+                    # Check if customer exists in TCustomers table
+                    if not tcust:
+                        logger.warning(f"Customer {header.CustomerID} for order {header.TransID.strip()} not found in TCustomers table. Skipping export.")
+                        jsonl_logger.info(build_jsonl_entry(
+                            action_type="Export from SQL to Unleashed",
+                            action_variant="export-from-sql-to-unleashed",
+                            status="Skipped",
+                            message=f"Order {header.TransID.strip()} cannot be exported: Customer {header.CustomerID} not found in system",
+                        ))
+                        results.append({"order_id": header.TransID.strip(), "status": "skipped", "reason": "Customer not found in system"})
+                        continue
+                    
                     if tcust and getattr(tcust, 'TaxCodeID', None) is not None:
                         tax_rec = await db.execute(select(TTaxCodes).where(TTaxCodes.TaxCodeID == tcust.TaxCodeID).limit(1))
                         taxobj = tax_rec.scalars().first()
