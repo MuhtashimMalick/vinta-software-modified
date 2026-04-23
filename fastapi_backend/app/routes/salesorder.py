@@ -192,7 +192,18 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
             customer_code = None
             customer_name = None
             shipping_method=None
-
+            if not cust:
+                # print("tcustomer not found")
+                logger.warning(f"Customer {header.CustomerID} for order {header.TransID.strip()} not found in TransCustomers table. Skipping export.")
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Export from SQL to Unleashed",
+                    action_variant="export-from-sql-to-unleashed",
+                    status="Skipped",
+                    message=f"Order {header.TransID.strip()} cannot be exported: Customer {header.CustomerID} not found in system",
+                ))
+                results.append({"order_id": header.TransID.strip(), "status": "skipped", "reason": "Customer not found in system"})
+                print("transcust not found")
+                continue
             if cust:
                 customer_name = cust.Name.strip() if cust.Name else None
                 # Do NOT map AccountCode to CustomerID. Use CustomerID from the header
@@ -203,7 +214,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                     cust_id = int(cust_val) if cust_val else None
                 except Exception:
                     cust_id = None
-
+                print("cusotmer",cust_id)
                 if cust_id is not None: #what if cust is not present in the tcustomer table should we return cust not present in our system 
                     tcust_res = await db.execute(select(TCustomers).where(TCustomers.CustomerID == header.CustomerID).limit(1))
                     tcust = tcust_res.scalars().first()
@@ -211,6 +222,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                     
                     # Check if customer exists in TCustomers table
                     if not tcust:
+			            # print("tcustomer not found")
                         logger.warning(f"Customer {header.CustomerID} for order {header.TransID.strip()} not found in TCustomers table. Skipping export.")
                         jsonl_logger.info(build_jsonl_entry(
                             action_type="Export from SQL to Unleashed",
@@ -219,6 +231,7 @@ async def export_sales_orders(db: AsyncSession = Depends(get_async_session)):
                             message=f"Order {header.TransID.strip()} cannot be exported: Customer {header.CustomerID} not found in system",
                         ))
                         results.append({"order_id": header.TransID.strip(), "status": "skipped", "reason": "Customer not found in system"})
+                        print("tcust not found")
                         continue
                     
                     if tcust and getattr(tcust, 'TaxCodeID', None) is not None:
