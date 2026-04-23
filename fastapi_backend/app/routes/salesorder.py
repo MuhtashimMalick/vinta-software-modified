@@ -433,7 +433,14 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
             # find header, customer and lines
             header_elem = root.find('.//tTransHeader')
             if header_elem is None:
-                raise HTTPException(status_code=400, detail="Missing tREMOTETransHeader element")
+                failed.append({"file": filename, "reason": f"Missing tTransHeader element"})
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Import from PDA to SQL",
+                    action_variant="import-from-pda-to-sql",
+                    status="Error",
+                    message=f"Failed to import {filename}: Missing tTransHeader element",
+                ))
+                continue
 
             def text(e, tag):
                 c = e.find(tag)
@@ -518,6 +525,16 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
 
             # customer
             customer_elem = root.find('.//tTransCustomer')
+            if customer_elem is None:
+                print('customer tag not find')
+                failed.append({"file": filename, "reason": f"Missing tTransCustomer element"})
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Import from PDA to SQL",
+                    action_variant="import-from-pda-to-sql",
+                    status="Error",
+                    message=f"Failed to import {filename}: Missing tTransCustomer element",
+                ))
+                continue
             if customer_elem is not None:
                 cust_kwargs = {
                     'Company_ID': company_id,
@@ -551,7 +568,17 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
                 await db.flush()
 
             # sale lines (may be many)
-            for line_elem in root.findall('.//tTransSaleLines'):
+            salelines_elem = root.find('.//tTransSaleLines')
+            if salelines_elem is None:
+                failed.append({"file": filename, "reason": f"Missing tTransSaleLines element"})
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Import from PDA to SQL",
+                    action_variant="import-from-pda-to-sql",
+                    status="Error",
+                    message=f"Failed to import {filename}: Missing tTransSaleLines element",
+                ))
+                continue
+            for line_elem in salelines_elem:
                 try:
                     sale_line_kwargs = {
                         'Company_ID': company_id,
@@ -584,7 +611,17 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
                     continue
 
             # sale tenders
-            for tender_elem in root.findall('.//tTransSaleTenders'):
+            saleTenders_elem = root.find('.//tTransSaleTenders')
+            if saleTenders_elem is None:
+                failed.append({"file": filename, "reason": f"Missing tTransSaleTenders element"})
+                jsonl_logger.info(build_jsonl_entry(
+                    action_type="Import from PDA to SQL",
+                    action_variant="import-from-pda-to-sql",
+                    status="Error",
+                    message=f"Failed to import {filename}: Missing tTransSaleTenders element",
+                ))
+                continue
+            for tender_elem in saleTenders_elem:
                 try:
                     tender_kwargs = {
                         'Company_ID': company_id,
