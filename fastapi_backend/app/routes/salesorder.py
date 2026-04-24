@@ -568,7 +568,7 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
                 await db.flush()
 
             # sale lines (may be many)
-            salelines_elem = root.find('.//tTransSaleLines')
+            salelines_elem = root.findall('.//tTransSaleLines')
             if salelines_elem is None:
                 failed.append({"file": filename, "reason": f"Missing tTransSaleLines element"})
                 jsonl_logger.info(build_jsonl_entry(
@@ -611,7 +611,7 @@ async def import_remote_xml(db: AsyncSession = Depends(get_async_session)):
                     continue
 
             # sale tenders
-            saleTenders_elem = root.find('.//tTransSaleTenders')
+            saleTenders_elem = root.findall('.//tTransSaleTenders')
             if saleTenders_elem is None:
                 failed.append({"file": filename, "reason": f"Missing tTransSaleTenders element"})
                 jsonl_logger.info(build_jsonl_entry(
